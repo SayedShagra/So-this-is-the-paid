@@ -1,0 +1,313 @@
+-- Complete script: Items selector + GUI + SaveConfig + 5s Stop + search + best-server-hop + visited servers (30min)
+
+--// Services
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+--// CONFIG files
+local configFile = "SelectedItemsConfig.json"
+local visitedFile = "VisitedServers.json"
+local selectedItems = {}
+local visitedServers = {} -- [serverId] = timestamp (os.time)
+
+--// helpers: load/save
+local function loadConfig()
+    if isfile and isfile(configFile) then
+        local ok, data = pcall(readfile, configFile)
+        if ok and data and data ~= "" then
+            local success, dec = pcall(function() return HttpService:JSONDecode(data) end)
+            if success and type(dec) == "table" then selectedItems = dec end
+        end
+    end
+end
+
+local function saveConfig()
+    if writefile then
+        pcall(writefile, configFile, HttpService:JSONEncode(selectedItems))
+    end
+end
+
+local function loadVisited()
+    if isfile and isfile(visitedFile) then
+        local ok, data = pcall(readfile, visitedFile)
+        if ok and data and data ~= "" then
+            local success, dec = pcall(function() return HttpService:JSONDecode(data) end)
+            if success and type(dec) == "table" then visitedServers = dec end
+        end
+    end
+end
+
+local function saveVisited()
+    if writefile then
+        pcall(writefile, visitedFile, HttpService:JSONEncode(visitedServers))
+    end
+end
+
+loadConfig()
+loadVisited()
+
+--// GUI
+local screenGui = Instance.new("ScreenGui")
+screenGui.ResetOnSpawn = false
+screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 380, 0, 460)
+mainFrame.Position = UDim2.new(0.5, -190, 0.5, -230)
+mainFrame.BackgroundColor3 = Color3.fromRGB(255,255,255)
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = screenGui
+
+local mainCorner = Instance.new("UICorner", mainFrame)
+mainCorner.CornerRadius = UDim.new(0, 14)
+local mainStroke = Instance.new("UIStroke", mainFrame)
+mainStroke.Color = Color3.fromRGB(220,220,220)
+mainStroke.Thickness = 1.5
+
+-- Top bar
+local topBar = Instance.new("Frame", mainFrame)
+topBar.Size = UDim2.new(1,0,0,46)
+topBar.Position = UDim2.new(0,0,0,0)
+topBar.BackgroundColor3 = Color3.fromRGB(245,245,245)
+local topCorner = Instance.new("UICorner", topBar); topCorner.CornerRadius = UDim.new(0,12)
+
+local title = Instance.new("TextLabel", topBar)
+title.Text = "Items Selector"
+title.Size = UDim2.new(1, -160, 1, 0)
+title.Position = UDim2.new(0, 12, 0, 0)
+title.BackgroundTransparency = 1
+title.Font = Enum.Font.GothamBold
+title.TextSize = 20
+title.TextColor3 = Color3.fromRGB(20,20,20)
+title.TextXAlignment = Enum.TextXAlignment.Left
+
+local saveBtn = Instance.new("TextButton", topBar)
+saveBtn.Text = "💾 Save"
+saveBtn.Size = UDim2.new(0,72,0,34)
+saveBtn.Position = UDim2.new(1, -158, 0, 6)
+saveBtn.BackgroundColor3 = Color3.fromRGB(0,150,60)
+saveBtn.TextColor3 = Color3.fromRGB(255,255,255)
+saveBtn.Font = Enum.Font.GothamBold
+saveBtn.TextSize = 14
+local saveCorner = Instance.new("UICorner", saveBtn); saveCorner.CornerRadius = UDim.new(0,8)
+
+local stopBtn = Instance.new("TextButton", topBar)
+stopBtn.Text = "⛔ Stop (5)"
+stopBtn.Size = UDim2.new(0,72,0,34)
+stopBtn.Position = UDim2.new(1, -74, 0, 6)
+stopBtn.BackgroundColor3 = Color3.fromRGB(170,30,30)
+stopBtn.TextColor3 = Color3.fromRGB(255,255,255)
+stopBtn.Font = Enum.Font.GothamBold
+stopBtn.TextSize = 14
+local stopCorner = Instance.new("UICorner", stopBtn); stopCorner.CornerRadius = UDim.new(0,8)
+
+-- Close button (optional)
+local closeBtn = Instance.new("TextButton", topBar)
+closeBtn.Text = "✕"
+closeBtn.Size = UDim2.new(0,34,0,34)
+closeBtn.Position = UDim2.new(1, -210, 0, 6)
+closeBtn.BackgroundTransparency = 1
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 18
+closeBtn.TextColor3 = Color3.fromRGB(140,140,140)
+
+closeBtn.MouseButton1Click:Connect(function()
+    screenGui:Destroy()
+end)
+
+-- Items list area
+local itemsFrame = Instance.new("ScrollingFrame", mainFrame)
+itemsFrame.Size = UDim2.new(1, -24, 0, 320)
+itemsFrame.Position = UDim2.new(0, 12, 0, 60)
+itemsFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+itemsFrame.ScrollBarThickness = 7
+itemsFrame.BackgroundTransparency = 1
+
+local itemsLayout = Instance.new("UIListLayout", itemsFrame)
+itemsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+itemsLayout.Padding = UDim.new(0,8)
+
+-- Status label
+local statusLabel = Instance.new("TextLabel", mainFrame)
+statusLabel.Size = UDim2.new(1, -24, 0, 34)
+statusLabel.Position = UDim2.new(0, 12, 1, -46)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Font = Enum.Font.GothamBold
+statusLabel.TextSize = 15
+statusLabel.TextColor3 = Color3.fromRGB(30,120,40)
+statusLabel.Text = ""
+
+-- Build items list from ReplicatedStorage.Assets.Items
+local okItemsFolder, itemsFolder = pcall(function() return ReplicatedStorage:WaitForChild("Assets"):WaitForChild("Items") end)
+if not okItemsFolder or not itemsFolder then
+    statusLabel.Text = "❌ Items folder not found at ReplicatedStorage.Assets.Items"
+else
+    for _, item in ipairs(itemsFolder:GetChildren()) do
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, 0, 0, 32)
+        btn.BackgroundColor3 = Color3.fromRGB(240,240,240)
+        btn.TextColor3 = Color3.fromRGB(20,20,20)
+        btn.Font = Enum.Font.Gotham
+        btn.TextSize = 14
+        btn.Text = (selectedItems[item.Name] and "☑ " or "☐ ") .. item.Name
+        btn.Parent = itemsFrame
+        local btnCorner = Instance.new("UICorner", btn); btnCorner.CornerRadius = UDim.new(0,8)
+
+        btn.MouseButton1Click:Connect(function()
+            if selectedItems[item.Name] then
+                selectedItems[item.Name] = nil
+                btn.Text = "☐ " .. item.Name
+            else
+                selectedItems[item.Name] = true
+                btn.Text = "☑ " .. item.Name
+            end
+        end)
+    end
+end
+
+-- Update canvas size automatically
+itemsLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    itemsFrame.CanvasSize = UDim2.new(0, 0, 0, itemsLayout.AbsoluteContentSize.Y + 8)
+end)
+
+-- Buttons behavior
+saveBtn.MouseButton1Click:Connect(function()
+    saveConfig()
+    statusLabel.Text = "✅ Config Saved!"
+end)
+
+local running = true
+stopBtn.MouseButton1Click:Connect(function()
+    running = false
+    statusLabel.Text = "⛔ Stopped by user."
+end)
+
+-- If there are no selected items, warn user
+local function hasSelected()
+    for k,v in pairs(selectedItems) do
+        if v then return true end
+    end
+    return false
+end
+
+-- Utility: find first matching item in players' backpacks (returns itemName, player)
+local function findInBackpacks()
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer then
+            local backpack = plr:FindFirstChild("Backpack")
+            if backpack then
+                for itemName,_ in pairs(selectedItems) do
+                    if backpack:FindFirstChild(itemName) then
+                        return itemName, plr.Name
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- Utility: find best server (highest players) satisfying conditions and not visited in last 30min
+local function findBestServer()
+    local PlaceId = game.PlaceId
+    local nextCursor = nil
+    local best = nil
+    local highestPlayers = -1
+    local now = os.time()
+    repeat
+        local url = "https://games.roblox.com/v1/games/"..tostring(PlaceId).."/servers/Public?sortOrder=Asc&limit=100"
+        if nextCursor and nextCursor ~= "" then
+            url = url .. "&cursor=" .. tostring(nextCursor)
+        end
+        local ok, res = pcall(function() return game:HttpGet(url) end)
+        if not ok or not res then break end
+        local success, data = pcall(function() return HttpService:JSONDecode(res) end)
+        if not success or type(data) ~= "table" then break end
+        nextCursor = data.nextPageCursor
+
+        for _, server in ipairs(data.data or {}) do
+            -- require playing > 3 and < 23 (strict)
+            if type(server.playing) == "number" and server.playing > 3 and server.playing < 23 and server.id ~= game.JobId then
+                local lastVisit = visitedServers[server.id]
+                if (not lastVisit) or (now - lastVisit) > 1800 then -- 1800s = 30min
+                    if server.playing > highestPlayers then
+                        highestPlayers = server.playing
+                        best = server
+                    end
+                end
+            end
+        end
+        -- continue pages until no more
+    until not nextCursor or nextCursor == ""
+
+    return best
+end
+
+-- When we teleport to a server, mark it visited with timestamp
+local function markVisited(serverId)
+    if not serverId then return end
+    visitedServers[tostring(serverId)] = os.time()
+    saveVisited()
+end
+
+-- Main flow: 5 sec countdown, then search loop
+spawn(function()
+    -- short wait for GUI to settle
+    task.wait(0.15)
+
+    -- countdown 5s allowing user to stop
+    for i = 5, 1, -1 do
+        if not running then return end
+        stopBtn.Text = "⛔ Stop ("..i..")"
+        task.wait(1)
+    end
+    stopBtn.Text = "⛔ Stop"
+
+    if not running then return end
+
+    if not hasSelected() then
+        statusLabel.Text = "⚠️ No items selected. اختر عناصر ثم اضغط Save."
+        return
+    end
+
+    statusLabel.Text = "🔍 Searching..."
+    while running do
+        task.wait(2) -- polling interval
+
+        -- 1) search current server players' backpacks
+        local foundItem, foundPlayer = findInBackpacks()
+        if foundItem then
+            statusLabel.Text = "✅ Found: "..foundItem.." at "..foundPlayer
+            running = false
+            break
+        end
+
+        -- 2) not found -> find best server to hop to (highest players between >3 and <23, not visited within 30min)
+        statusLabel.Text = "⏩ Finding best server to hop..."
+        local bestServer = findBestServer()
+        if bestServer then
+            -- mark that we're going to visit it (so we don't re-enter it quickly)
+            markVisited(tostring(bestServer.id))
+            statusLabel.Text = "⏩ Teleporting to server with "..tostring(bestServer.playing).." players..."
+            -- teleport
+            pcall(function()
+                TeleportService:TeleportToPlaceInstance(game.PlaceId, bestServer.id, LocalPlayer)
+            end)
+            -- after teleport call we stop this script here (Teleport will load new game)
+            break
+        else
+            -- no suitable server found (maybe all visited recently or none in range)
+            statusLabel.Text = "ℹ️ No suitable servers found (not visited / players). Retrying in 30s..."
+            -- wait longer before retrying
+            for i=1,30 do
+                if not running then break end
+                task.wait(1)
+            end
+        end
+    end
+end)
