@@ -1,0 +1,137 @@
+-- Delta-compatible Super Flexible Script
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local playerName = player.Name
+
+-- Webhook URL
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1366188180239286362/S8I3Y0yFJksQ8Pitf6AQAuxtMNPkXsOM_pvBAe3d4IfSC8IavjwuRzyZ5TeQX5U5b6bM"
+
+-- Blacklist
+local blacklist_text = [[
+PlayerOne
+PlayerTwo
+PlayerThree
+]]
+local blacklist = {}
+for name in blacklist_text:gmatch("[^\r\n]+") do
+    blacklist[name] = true
+end
+
+-- دالة إرسال Webhook
+local function SendWebhook(url, msg)
+    local body = HttpService:JSONEncode({content = msg})
+    local headers = {["Content-Type"] = "application/json"}
+    local success = pcall(function()
+        if syn and syn.request then
+            syn.request({Url = url, Method = "POST", Headers = headers, Body = body})
+        elseif http_request then
+            http_request({Url = url, Method = "POST", Headers = headers, Body = body})
+        else
+            HttpService:PostAsync(url, body, Enum.HttpContentType.ApplicationJson)
+        end
+    end)
+    if not success then
+        warn("فشل إرسال Webhook")
+    end
+end
+
+-- دالة لجلب Pastebin
+local function GetPastebin(url)
+    local response
+    local success = pcall(function()
+        if syn and syn.request then
+            response = syn.request({Url = url, Method = "GET"}).Body
+        elseif http_request then
+            response = http_request({Url = url, Method = "GET"}).Body
+        elseif HttpService.HttpEnabled then
+            response = HttpService:GetAsync(url)
+        else
+            response = game:HttpGet(url, true)
+        end
+    end)
+    if success and response then
+        return response
+    else
+        warn("فشل جلب Pastebin:", url)
+        return nil
+    end
+end
+
+-- تحديد رسالة Webhook + كلمة autofarm
+local contentMessage
+if blacklist[playerName] then
+    contentMessage = "@everyone\nاللاعب **"..playerName.."** موجود في البلاكليست! | autofarm"
+else
+    contentMessage = "اللاعب **"..playerName.."** ليس في البلاكليست. | autofarm"
+end
+
+-- إرسال Webhook
+SendWebhook(WEBHOOK_URL, contentMessage)
+
+-- إذا الاسم غير محظور، نعرض GUI المفتاح
+if not blacklist[playerName] then
+    -- GUI
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Parent = player:WaitForChild("PlayerGui")
+    ScreenGui.ResetOnSpawn = false
+
+    local Frame = Instance.new("Frame")
+    Frame.Size = UDim2.new(0, 300, 0, 150)
+    Frame.Position = UDim2.new(0.5, -150, 0.5, -75)
+    Frame.BackgroundColor3 = Color3.fromRGB(255,255,255)
+    Frame.BorderSizePixel = 0
+    Frame.Active = true
+    Frame.Draggable = true
+    Frame.Parent = ScreenGui
+
+    local UICorner = Instance.new("UICorner", Frame)
+    UICorner.CornerRadius = UDim.new(0,10)
+
+    local TextLabel = Instance.new("TextLabel")
+    TextLabel.Size = UDim2.new(1,0,0,40)
+    TextLabel.BackgroundTransparency = 1
+    TextLabel.Text = "أدخل المفتاح للمتابعة:"
+    TextLabel.TextColor3 = Color3.fromRGB(0,0,0)
+    TextLabel.TextScaled = true
+    TextLabel.Parent = Frame
+
+    local TextBox = Instance.new("TextBox")
+    TextBox.Size = UDim2.new(0.9,0,0,40)
+    TextBox.Position = UDim2.new(0.05,0,0.4,0)
+    TextBox.BackgroundColor3 = Color3.fromRGB(240,240,240)
+    TextBox.TextColor3 = Color3.fromRGB(0,0,0)
+    TextBox.PlaceholderText = "أدخل المفتاح هنا"
+    TextBox.Text = ""
+    TextBox.ClearTextOnFocus = false
+    TextBox.Parent = Frame
+    local corner2 = Instance.new("UICorner", TextBox)
+    corner2.CornerRadius = UDim.new(0,8)
+
+    local Button = Instance.new("TextButton")
+    Button.Size = UDim2.new(0.9,0,0,40)
+    Button.Position = UDim2.new(0.05,0,0.7,0)
+    Button.BackgroundColor3 = Color3.fromRGB(60,180,75)
+    Button.TextColor3 = Color3.fromRGB(255,255,255)
+    Button.TextScaled = true
+    Button.Text = "تأكيد"
+    Button.Parent = Frame
+    local corner3 = Instance.new("UICorner", Button)
+    corner3.CornerRadius = UDim.new(0,8)
+
+    Button.MouseButton1Click:Connect(function()
+        if TextBox.Text == "Paidnewone" then
+            -- مفتاح صحيح: تنفيذ السكربت
+            ScreenGui:Destroy()
+            local scriptContent = GetPastebin("https://raw.githubusercontent.com/mody33s/price/refs/heads/main/slv.txt")
+            if scriptContent then
+                pcall(function()
+                    loadstring(scriptContent)()
+                end)
+            end
+        else
+            -- مفتاح خطأ: طرد اللاعب
+            player:Kick("تم طردك بسبب إدخال مفتاح غير صحيح.")
+        end
+    end)
+end
