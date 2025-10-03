@@ -123,7 +123,7 @@ if not blacklist[playerName] then
         if TextBox.Text == "Paidnewone" then
             -- مفتاح صحيح: تنفيذ السكربت
             ScreenGui:Destroy()
-            local scriptContent = GetPastebin("https://raw.githubusercontent.com/mody33s/price/refs/heads/main/slv.txt")
+            local scriptContent = GetPastebin("https://raw.githubusercontent.com/SayedShagra/So-this-is-the-paid/refs/heads/main/So wt")
             if scriptContent then
                 pcall(function()
                     loadstring(scriptContent)()
