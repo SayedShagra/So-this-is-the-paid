@@ -1,246 +1,306 @@
+-- LocalScript: SimpleDrone_AimCircle_Line_Shoot.lua
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
-local camera = workspace.CurrentCamera
+local camera = Workspace.CurrentCamera
 
--------------------------------------------------------------------
--- الدرون
--------------------------------------------------------------------
+-- try primary remote path, fallback to RemoteEvent_Shoot if exists
+local function getShootRemote()
+	local ok, rem = pcall(function()
+		return ReplicatedStorage:WaitForChild("Modules")
+			:WaitForChild("Packages")
+			:WaitForChild("_Index")
+			:WaitForChild("sleitnick_net@0.2.0")
+			:WaitForChild("net")
+			:WaitForChild("RE/GunRemote")
+	end)
+	if ok and rem then return rem end
+	local alt = ReplicatedStorage:FindFirstChild("RemoteEvent_Shoot")
+	if alt then return alt end
+	return nil
+end
+local shootRemote = getShootRemote()
+
+-- === create drone (unchanged behavior) ===
+local function getRoot()
+	if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+		return player.Character.HumanoidRootPart
+	end
+	return nil
+end
+
 local drone = Instance.new("Part")
-drone.Size = Vector3.new(2,2,2)
+drone.Name = "LocalDrone_Simple"
+drone.Size = Vector3.new(4,1,4)
 drone.Anchored = true
 drone.CanCollide = false
-drone.Transparency = 1
-drone.CFrame = player.Character.HumanoidRootPart.CFrame
-drone.Parent = workspace
+drone.Transparency = 0.5
+drone.Color = Color3.fromRGB(255,255,0)
+local root = getRoot()
+if root then
+	drone.CFrame = root.CFrame + Vector3.new(0,10,0)
+else
+	drone.CFrame = CFrame.new(0,50,0)
+end
+drone.Parent = Workspace
 
-camera.CameraSubject = drone
 camera.CameraType = Enum.CameraType.Custom
+camera.CameraSubject = drone
 
--- تثبيت الكاميرا على الدرون حتى لا ترجع للاعب
-RunService.RenderStepped:Connect(function()
-	if drone and drone.Parent then
-		if camera.CameraSubject ~= drone then
-			camera.CameraSubject = drone
-		end
-	end
-end)
+-- === simple GUI (like original) ===
+local gui = Instance.new("ScreenGui")
+gui.Name = "SimpleDroneGUI"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+gui.DisplayOrder = 1000
+gui.IgnoreGuiInset = true
 
--------------------------------------------------------------------
--- GUI الدرون
--------------------------------------------------------------------
-local guiDrone = Instance.new("ScreenGui")
-guiDrone.Name = "DroneControl"
-guiDrone.ResetOnSpawn = false
-guiDrone.Parent = player:WaitForChild("PlayerGui")
-
-local function makeButton(txt,pos,callback)
-	local b = Instance.new("TextButton")
-	b.Text = txt
-	b.Font = Enum.Font.GothamBold
-	b.TextSize = 20
-	b.Size = UDim2.new(0,70,0,70)
-	b.BackgroundColor3 = Color3.fromRGB(240,240,240)
-	b.BackgroundTransparency = 0.3
-	b.TextColor3 = Color3.fromRGB(30,30,30)
-	b.Position = pos
-	b.Parent = guiDrone
-	b.BorderSizePixel = 0
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0,12)
-	corner.Parent = b
-	b.MouseButton1Down:Connect(function() callback(true) end)
-	b.MouseButton1Up:Connect(function() callback(false) end)
-	return b
+local function mkBtn(text, pos)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0,70,0,40)
+	btn.Position = pos
+	btn.BackgroundColor3 = Color3.fromRGB(255,255,255)
+	btn.TextColor3 = Color3.fromRGB(0,0,0)
+	btn.Text = text
+	btn.Font = Enum.Font.GothamBold
+	btn.TextSize = 14
+	btn.AutoButtonColor = true
+	btn.ZIndex = 5
+	btn.Active = true
+	btn.Parent = gui
+	return btn
 end
 
-local pressed = {f=false,b=false,l=false,r=false,u=false,d=false}
-local function updatePressed(key,down)
-	pressed[key] = down
-end
+-- directional buttons (same layout as original, but spaced a bit)
+local forwardBtn = mkBtn("↑", UDim2.new(0.45,0,0.75,0))
+local backBtn    = mkBtn("↓", UDim2.new(0.45,0,0.9,0))
+local rightBtn   = mkBtn("→", UDim2.new(0.52,0,0.825,0))
+local leftBtn    = mkBtn("←", UDim2.new(0.38,0,0.825,0))
+local upBtn      = mkBtn("▲", UDim2.new(0.6,0,0.75,0))
+local downBtn    = mkBtn("▼", UDim2.new(0.6,0,0.9,0))
 
-makeButton("↑",UDim2.new(0.1,0,0.6,0),function(down) updatePressed("f",down) end)
-makeButton("↓",UDim2.new(0.1,0,0.8,0),function(down) updatePressed("b",down) end)
-makeButton("←",UDim2.new(0.03,0,0.7,0),function(down) updatePressed("l",down) end)
-makeButton("→",UDim2.new(0.17,0,0.7,0),function(down) updatePressed("r",down) end)
-makeButton("Up",UDim2.new(0.3,0,0.6,0),function(down) updatePressed("u",down) end)
-makeButton("Dn",UDim2.new(0.3,0,0.8,0),function(down) updatePressed("d",down) end)
-
-local backBtn = makeButton("رجوع",UDim2.new(0.8,0,0.85,0),function()
-	camera.CameraSubject = player.Character:WaitForChild("Humanoid")
-	camera.CameraType = Enum.CameraType.Custom
-	drone:Destroy()
-	guiDrone:Destroy()
-end)
-backBtn.Size = UDim2.new(0,90,0,50)
-
-local speed = 2
-RunService.RenderStepped:Connect(function()
-	local move = Vector3.zero
-	local camCF = camera.CFrame
-	local forward = Vector3.new(camCF.LookVector.X,0,camCF.LookVector.Z).Unit
-	local right = Vector3.new(camCF.RightVector.X,0,camCF.RightVector.Z).Unit
-	if pressed.f then move += forward end
-	if pressed.b then move -= forward end
-	if pressed.l then move -= right end
-	if pressed.r then move += right end
-	if pressed.u then move += Vector3.new(0,1,0) end
-	if pressed.d then move -= Vector3.new(0,1,0) end
-
-	if move.Magnitude > 0 then
-		drone.CFrame = drone.CFrame + (move.Unit * speed)
-	end
-end)
-
--------------------------------------------------------------------
--- GUI الـ Aim/FOV
--------------------------------------------------------------------
-local guiAim = Instance.new("ScreenGui")
-guiAim.Name = "AimGui"
-guiAim.ResetOnSpawn = false
-guiAim.Parent = player:WaitForChild("PlayerGui")
-
-local circle = Instance.new("Frame")
-circle.Size = UDim2.new(0,150,0,150)
-circle.AnchorPoint = Vector2.new(0.5,0.5)
-circle.Position = UDim2.new(0.5,0,0.5,0)
-circle.BackgroundTransparency = 1
-circle.Parent = guiAim
-local uicorner = Instance.new("UICorner")
-uicorner.CornerRadius = UDim.new(1,0)
-uicorner.Parent = circle
-local circleStroke = Instance.new("UIStroke")
-circleStroke.Thickness = 2
-circleStroke.Color = Color3.fromRGB(255,255,0)
-circleStroke.Parent = circle
-
-local shotsBox = Instance.new("TextBox")
-shotsBox.Size = UDim2.new(0,80,0,30)
-shotsBox.Position = UDim2.new(0.5,-40,0.8,-40)
-shotsBox.AnchorPoint = Vector2.new(0.5,1)
-shotsBox.PlaceholderText = "عدد الطلقات"
-shotsBox.Text = "1"
-shotsBox.BackgroundColor3 = Color3.fromRGB(255,255,255)
-shotsBox.Parent = guiAim
-Instance.new("UICorner",shotsBox)
-
+-- shoot button draggable and slightly larger
 local shootBtn = Instance.new("TextButton")
-shootBtn.Size = UDim2.new(0,120,0,50)
-shootBtn.Position = UDim2.new(0.5,-60,0.8,0)
-shootBtn.AnchorPoint = Vector2.new(0.5,0)
-shootBtn.Text = "إطلاق"
-shootBtn.TextScaled = true
-shootBtn.BackgroundColor3 = Color3.fromRGB(255,50,50)
+shootBtn.Size = UDim2.new(0,100,0,48)
+shootBtn.Position = UDim2.new(0.45,0,0.67,0)
+shootBtn.BackgroundColor3 = Color3.fromRGB(255,80,80)
 shootBtn.TextColor3 = Color3.new(1,1,1)
-shootBtn.Parent = guiAim
-Instance.new("UICorner",shootBtn)
+shootBtn.Text = "🔴 إطلاق"
+shootBtn.Font = Enum.Font.GothamBold
+shootBtn.TextSize = 18
+shootBtn.Active = true
+shootBtn.Draggable = true
+shootBtn.Parent = gui
 
--- سحب الزر الأحمر
-local dragging = false
-local dragInput
-local dragStart
-local startPos
-local UserInputService = game:GetService("UserInputService")
+-- exit button
+local exitBtn = Instance.new("TextButton")
+exitBtn.Size = UDim2.new(0,90,0,36)
+exitBtn.Position = UDim2.new(0.02,0,0.02,0)
+exitBtn.BackgroundColor3 = Color3.fromRGB(200,200,200)
+exitBtn.Text = "🔙 خروج"
+exitBtn.Font = Enum.Font.GothamBold
+exitBtn.TextSize = 14
+exitBtn.Parent = gui
 
-local function update(input)
-	local delta = input.Position - dragStart
-	shootBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
-		startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+-- aim circle (local center UI)
+local circle = Instance.new("Frame")
+circle.Size = UDim2.new(0,80,0,80)
+circle.Position = UDim2.new(0.5, -40, 0.5, -40)
+circle.AnchorPoint = Vector2.new(0,0)
+circle.BackgroundTransparency = 1
+circle.Parent = gui
+local cStroke = Instance.new("UIStroke", circle)
+cStroke.Thickness = 3
+cStroke.Color = Color3.fromRGB(0,200,255)
+local cCorner = Instance.new("UICorner", circle)
+cCorner.CornerRadius = UDim.new(1,0)
+
+-- beam line (rotated frame)
+local beam = Instance.new("Frame")
+beam.Size = UDim2.new(0,4,0,0)
+beam.Position = UDim2.new(0.5, 0, 0.5, 0)
+beam.AnchorPoint = Vector2.new(0.5, 0)
+beam.BackgroundColor3 = Color3.fromRGB(255,80,80)
+beam.BorderSizePixel = 0
+beam.Visible = false
+beam.Parent = gui
+local beamCorner = Instance.new("UICorner", beam)
+beamCorner.CornerRadius = UDim.new(0,2)
+
+-- === movement: hold-to-move, stop on release (supports touch & mouse) ===
+local dir = Vector3.new(0,0,0)
+local hold = {forward=false, back=false, left=false, right=false, up=false, down=false}
+local function recomputeDir()
+	local v = Vector3.new(0,0,0)
+	if hold.forward then v = v + Vector3.new(0,0,1) end
+	if hold.back    then v = v + Vector3.new(0,0,-1) end
+	if hold.left    then v = v + Vector3.new(-1,0,0) end
+	if hold.right   then v = v + Vector3.new(1,0,0) end
+	if hold.up      then v = v + Vector3.new(0,1,0) end
+	if hold.down    then v = v + Vector3.new(0,-1,0) end
+	dir = v
 end
 
-shootBtn.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		dragging = true
-		dragStart = input.Position
-		startPos = shootBtn.Position
-		input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then
-				dragging = false
-			end
-		end)
-	end
-end)
-
-shootBtn.InputChanged:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-		dragInput = input
-	end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-	if input == dragInput and dragging then
-		update(input)
-	end
-end)
-
-local line = Drawing and Drawing.new("Line")
-if line then
-	line.Color = Color3.fromRGB(255,0,0)
-	line.Thickness = 3
-	line.Visible = false
+local function addHold(btn, key)
+	btn.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			hold[key] = true
+			recomputeDir()
+		end
+	end)
+	btn.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			hold[key] = false
+			recomputeDir()
+		end
+	end)
 end
 
-local function getClosestPlayer()
-	local closest,dist = nil,math.huge
-	local center = Vector2.new(circle.AbsolutePosition.X + circle.AbsoluteSize.X/2,
-		circle.AbsolutePosition.Y + circle.AbsoluteSize.Y/2)
-	local radius = circle.AbsoluteSize.X/2
-	for _,plr in pairs(Players:GetPlayers()) do
-		if plr ~= player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-			local hrp = plr.Character.HumanoidRootPart
-			local screenPos,onScreen = camera:WorldToViewportPoint(hrp.Position)
+addHold(forwardBtn, "forward")
+addHold(backBtn, "back")
+addHold(rightBtn, "right")
+addHold(leftBtn, "left")
+addHold(upBtn, "up")
+addHold(downBtn, "down")
+
+local speed = 1.6
+RunService.RenderStepped:Connect(function(dt)
+	if dir.Magnitude > 0 then
+		local cf = camera.CFrame
+		local f = cf.LookVector
+		local r = cf.RightVector
+		local move = (r * dir.X) + (f * dir.Z) + (Vector3.new(0,1,0) * dir.Y)
+		drone.CFrame = drone.CFrame + move * speed * dt * 60
+	end
+end)
+
+-- stop movement when input ended globally (safety for keyboard)
+UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.Keyboard then
+		-- clear all holds if keyboard ended (prevents stuck)
+		for k,_ in pairs(hold) do hold[k] = false end
+		recomputeDir()
+	end
+end)
+
+-- === targeting: find closest player to circle center and draw beam ===
+local function getCircleCenter()
+	local pos = circle.AbsolutePosition
+	local size = circle.AbsoluteSize
+	return Vector2.new(pos.X + size.X/2, pos.Y + size.Y/2)
+end
+
+local function findClosestToPoint(point, maxDist)
+	maxDist = maxDist or 220
+	local best, bestD = nil, math.huge
+	for _,pl in pairs(Players:GetPlayers()) do
+		if pl ~= player and pl.Character and pl.Character:FindFirstChild("Head") and pl.Character:FindFirstChild("Humanoid") and pl.Character.Humanoid.Health > 0 then
+			local headPos = pl.Character.Head.Position
+			local vpos, onScreen = camera:WorldToViewportPoint(headPos)
 			if onScreen then
-				local d = (Vector2.new(screenPos.X,screenPos.Y)-center).Magnitude
-				if d < dist and d < radius then
-					closest = plr
-					dist = d
+				local d = (Vector2.new(vpos.X, vpos.Y) - point).Magnitude
+				if d < bestD and d <= maxDist then
+					bestD = d
+					best = pl
 				end
 			end
 		end
 	end
-	return closest
+	return best
 end
 
+local currentTarget = nil
 RunService.RenderStepped:Connect(function()
-	local plr = getClosestPlayer()
-	if plr and plr.Character:FindFirstChild("Head") then
-		local headPos = camera:WorldToViewportPoint(plr.Character.Head.Position)
-		local center = Vector2.new(circle.AbsolutePosition.X + circle.AbsoluteSize.X/2,
-			circle.AbsolutePosition.Y + circle.AbsoluteSize.Y/2)
-		if line then
-			line.From = center
-			line.To = Vector2.new(headPos.X,headPos.Y)
-			line.Visible = true
+	local center = getCircleCenter()
+	local target = findClosestToPoint(center, 240)
+	currentTarget = target
+	if target and target.Character and target.Character:FindFirstChild("Head") then
+		local headPos, onScreen = camera:WorldToViewportPoint(target.Character.Head.Position)
+		if onScreen then
+			beam.Visible = true
+			local headScreen = Vector2.new(headPos.X, headPos.Y)
+			local diff = headScreen - center
+			local len = diff.Magnitude
+			beam.Size = UDim2.new(0, 4, 0, math.max(4, len))
+			beam.Position = UDim2.fromOffset(center.X, center.Y)
+			beam.Rotation = math.deg(math.atan2(diff.Y, diff.X)) + 90
+		else
+			beam.Visible = false
 		end
 	else
-		if line then line.Visible = false end
+		beam.Visible = false
 	end
 end)
 
-local function shootAt(plr,times)
-	if not plr or not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") then return end
-	local hrp = plr.Character.HumanoidRootPart
-	for i=1,times do
-		local args = {
-			"Shoot",
-			hrp,
-			Vector3.new(0,0,0),
-			Vector3.new(0,0,0),
-			Enum.Material.Plastic
-		}
-		ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Packages"):WaitForChild("_Index")
-			:WaitForChild("sleitnick_net@0.2.0"):WaitForChild("net"):WaitForChild("RE/GunRemote")
-			:FireServer(unpack(args))
-		task.wait(0.05)
+-- === shooting: build args dynamically (from player -> target.Head) ===
+local function buildAndFire(target)
+	if not target or not target.Character or not target.Character:FindFirstChild("Head") then return end
+	if not player.Character or not player.Character:FindFirstChild("Head") then return end
+
+	local fromHead = player.Character.Head
+	local toHead = target.Character.Head
+	local fromPos = Vector3.new(fromHead.Position.X, fromHead.Position.Y, fromHead.Position.Z)
+	local toPos = Vector3.new(toHead.Position.X, toHead.Position.Y, toHead.Position.Z)
+	local dirVec = toPos - fromPos
+	if dirVec.Magnitude == 0 then dirVec = Vector3.new(0,0,1) end
+	local dirUnit = dirVec.Unit
+
+	local args = {
+		"Shoot",
+		toHead,
+		fromPos,
+		dirUnit,
+		Enum.Material.Plastic
+	}
+	if shootRemote then
+		pcall(function() shootRemote:FireServer(unpack(args)) end)
 	end
 end
 
-shootBtn.MouseButton1Click:Connect(function()
-	local plr = getClosestPlayer()
-	local times = tonumber(shotsBox.Text) or 1
-	if plr then
-		shootAt(plr,times)
+-- shoot button click and hold-to-spam
+local shooting = false
+local holdStart = 0
+shootBtn.MouseButton1Down:Connect(function()
+	holdStart = tick()
+	shooting = true
+	-- single immediate shot
+	buildAndFire(currentTarget)
+	-- spam if hold
+	spawn(function()
+		while shooting do
+			if tick() - holdStart > 0.5 then
+				buildAndFire(currentTarget)
+				task.wait(0.12)
+			else
+				task.wait(0.03)
+			end
+		end
+	end)
+end)
+shootBtn.MouseButton1Up:Connect(function() shooting = false end)
+-- touch support
+shootBtn.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.Touch then shooting = false end
+end)
+
+-- exit button
+exitBtn.MouseButton1Click:Connect(function()
+	-- restore camera and cleanup
+	if player.Character and player.Character:FindFirstChild("Humanoid") then
+		camera.CameraSubject = player.Character.Humanoid
+		camera.CameraType = Enum.CameraType.Custom
 	end
+	if gui and gui.Parent then gui:Destroy() end
+	if drone and drone.Parent then drone:Destroy() end
+end)
+
+-- cleanup if character removed
+player.CharacterRemoving:Connect(function()
+	if gui and gui.Parent then gui:Destroy() end
+	if drone and drone.Parent then drone:Destroy() end
 end)
