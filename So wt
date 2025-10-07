@@ -1,253 +1,147 @@
--- LocalScript: SimpleDrone_AimCircle_Line_Shoot.lua
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
-local Workspace = game:GetService("Workspace")
+-- ⬛ نظام تحكم بالدرون + إطلاق + خط + دائرة + زر رجوع
+-- النسخة المطلوبة بدون GUI متطور
 
-local player = Players.LocalPlayer
-local camera = Workspace.CurrentCamera
+local player = game.Players.LocalPlayer
+local char = player.Character or player.CharacterAdded:Wait()
+local camera = workspace.CurrentCamera
+local mouse = player:GetMouse()
 
--- try primary remote path, fallback to RemoteEvent_Shoot if exists
-local function getShootRemote()
-	local ok, rem = pcall(function()
-		return ReplicatedStorage:WaitForChild("Modules")
-			:WaitForChild("Packages")
-			:WaitForChild("_Index")
-			:WaitForChild("sleitnick_net@0.2.0")
-			:WaitForChild("net")
-			:WaitForChild("RE/GunRemote")
-	end)
-	if ok and rem then return rem end
-	local alt = ReplicatedStorage:FindFirstChild("RemoteEvent_Shoot")
-	if alt then return alt end
-	return nil
-end
-local shootRemote = getShootRemote()
+-- عناصر واجهة المستخدم
+local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+gui.Name = "DroneSystem"
 
--- === create drone (unchanged behavior) ===
-local function getRoot()
-	if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-		return player.Character.HumanoidRootPart
-	end
-	return nil
-end
-
-local drone = Instance.new("Part")
-drone.Name = "LocalDrone_Simple"
-drone.Size = Vector3.new(4,1,4)
-drone.Anchored = true
-drone.CanCollide = false
-drone.Transparency = 0.5
-drone.Color = Color3.fromRGB(255,255,0)
-local root = getRoot()
-if root then
-	drone.CFrame = root.CFrame + Vector3.new(0,10,0)
-else
-	drone.CFrame = CFrame.new(0,50,0)
-end
-drone.Parent = Workspace
-
-camera.CameraType = Enum.CameraType.Custom
-camera.CameraSubject = drone
-
--- === simple GUI (like original) ===
-local gui = Instance.new("ScreenGui")
-gui.Name = "SimpleDroneGUI"
-gui.ResetOnSpawn = false
-gui.Parent = player:WaitForChild("PlayerGui")
-gui.DisplayOrder = 1000
-gui.IgnoreGuiInset = true
-
-local function mkBtn(text, pos)
-	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(0,70,0,40)
-	btn.Position = pos
-	btn.BackgroundColor3 = Color3.fromRGB(255,255,255)
-	btn.TextColor3 = Color3.fromRGB(0,0,0)
-	btn.Text = text
-	btn.Font = Enum.Font.GothamBold
-	btn.TextSize = 14
-	btn.AutoButtonColor = true
-	btn.ZIndex = 5
-	btn.Active = true
-	btn.Parent = gui
-	return btn
-end
-
--- directional buttons (same layout as original, but spaced a bit)
-local forwardBtn = mkBtn("↑", UDim2.new(0.45,0,0.75,0))
-local backBtn    = mkBtn("↓", UDim2.new(0.45,0,0.9,0))
-local rightBtn   = mkBtn("→", UDim2.new(0.52,0,0.825,0))
-local leftBtn    = mkBtn("←", UDim2.new(0.38,0,0.825,0))
-local upBtn      = mkBtn("▲", UDim2.new(0.6,0,0.75,0))
-local downBtn    = mkBtn("▼", UDim2.new(0.6,0,0.9,0))
-
--- shoot button draggable and slightly larger
-local shootBtn = Instance.new("TextButton")
-shootBtn.Size = UDim2.new(0,100,0,48)
-shootBtn.Position = UDim2.new(0.45,0,0.67,0)
-shootBtn.BackgroundColor3 = Color3.fromRGB(255,80,80)
-shootBtn.TextColor3 = Color3.new(1,1,1)
-shootBtn.Text = "🔴 إطلاق"
-shootBtn.Font = Enum.Font.GothamBold
-shootBtn.TextSize = 18
-shootBtn.Active = true
-shootBtn.Draggable = true
-shootBtn.Parent = gui
-
--- exit button
-local exitBtn = Instance.new("TextButton")
-exitBtn.Size = UDim2.new(0,90,0,36)
-exitBtn.Position = UDim2.new(0.02,0,0.02,0)
-exitBtn.BackgroundColor3 = Color3.fromRGB(200,200,200)
-exitBtn.Text = "🔙 خروج"
-exitBtn.Font = Enum.Font.GothamBold
-exitBtn.TextSize = 14
-exitBtn.Parent = gui
-
--- aim circle (local center UI)
-local circle = Instance.new("Frame")
-circle.Size = UDim2.new(0,80,0,80)
-circle.Position = UDim2.new(0.5, -40, 0.5, -40)
-circle.AnchorPoint = Vector2.new(0,0)
-circle.BackgroundTransparency = 1
+-- دائرة الاستهداف
+local circle = Instance.new("Frame", gui)
+circle.Size = UDim2.new(0, 40, 0, 40)
+circle.Position = UDim2.new(0.5, -20, 0.5, -20)
+circle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+circle.BackgroundTransparency = 0.7
+circle.BorderSizePixel = 0
+circle.AnchorPoint = Vector2.new(0.5, 0.5)
+circle.Visible = true
+circle.ZIndex = 2
+circle.ClipsDescendants = true
 circle.Parent = gui
-local cStroke = Instance.new("UIStroke", circle)
-cStroke.Thickness = 3
-cStroke.Color = Color3.fromRGB(0,200,255)
-local cCorner = Instance.new("UICorner", circle)
-cCorner.CornerRadius = UDim.new(1,0)
+Instance.new("UICorner", circle).CornerRadius = UDim.new(1, 0)
 
--- beam line (rotated frame)
-local beam = Instance.new("Frame")
-beam.Size = UDim2.new(0,4,0,0)
-beam.Position = UDim2.new(0.5, 0, 0.5, 0)
-beam.AnchorPoint = Vector2.new(0.5, 0)
-beam.BackgroundColor3 = Color3.fromRGB(255,80,80)
-beam.BorderSizePixel = 0
-beam.Visible = false
-beam.Parent = gui
-local beamCorner = Instance.new("UICorner", beam)
-beamCorner.CornerRadius = UDim.new(0,2)
+-- خط التتبع
+local line = Instance.new("Frame", gui)
+line.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+line.BorderSizePixel = 0
+line.Size = UDim2.new(0, 2, 0, 0)
+line.AnchorPoint = Vector2.new(0.5, 0)
+line.Visible = true
+line.ZIndex = 1
 
--- === movement: hold-to-move, stop on release (supports touch & mouse) ===
-local dir = Vector3.new(0,0,0)
-local hold = {forward=false, back=false, left=false, right=false, up=false, down=false}
-local function recomputeDir()
-	local v = Vector3.new(0,0,0)
-	if hold.forward then v = v + Vector3.new(0,0,1) end
-	if hold.back    then v = v + Vector3.new(0,0,-1) end
-	if hold.left    then v = v + Vector3.new(-1,0,0) end
-	if hold.right   then v = v + Vector3.new(1,0,0) end
-	if hold.up      then v = v + Vector3.new(0,1,0) end
-	if hold.down    then v = v + Vector3.new(0,-1,0) end
-	dir = v
+-- أزرار التحكم
+local controlFrame = Instance.new("Frame", gui)
+controlFrame.Position = UDim2.new(0.05, 0, 0.4, 0)
+controlFrame.Size = UDim2.new(0, 120, 0, 200)
+controlFrame.BackgroundTransparency = 1
+
+local directions = {
+	{ name = "أمام", key = Enum.KeyCode.W },
+	{ name = "خلف", key = Enum.KeyCode.S },
+	{ name = "يمين", key = Enum.KeyCode.D },
+	{ name = "يسار", key = Enum.KeyCode.A },
+}
+
+local buttons = {}
+
+for i, dir in ipairs(directions) do
+	local b = Instance.new("TextButton", controlFrame)
+	b.Size = UDim2.new(1, 0, 0, 40)
+	b.Position = UDim2.new(0, 0, 0, (i - 1) * 45)
+	b.Text = dir.name
+	b.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	b.TextColor3 = Color3.new(1, 1, 1)
+	Instance.new("UICorner", b).CornerRadius = UDim.new(0, 10)
+	buttons[dir.key] = b
 end
 
-local function addHold(btn, key)
-	btn.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			hold[key] = true
-			recomputeDir()
+-- زر الرجوع
+local exitButton = Instance.new("TextButton", gui)
+exitButton.Size = UDim2.new(0, 100, 0, 40)
+exitButton.Position = UDim2.new(0.9, 0, 0.9, 0)
+exitButton.Text = "رجوع"
+exitButton.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+exitButton.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", exitButton).CornerRadius = UDim.new(0, 10)
+
+-- إعدادات
+local droneActive = false
+local drone = Instance.new("Part", workspace)
+drone.Name = "Drone"
+drone.Size = Vector3.new(2, 1, 2)
+drone.Transparency = 1
+drone.Anchored = false
+drone.CanCollide = false
+drone.CFrame = char.HumanoidRootPart.CFrame
+
+-- تفعيل التحكم بالدرون
+for key, btn in pairs(buttons) do
+	local moving = false
+	btn.MouseButton1Down:Connect(function()
+		if not droneActive then return end
+		moving = true
+		while moving do
+			if key == Enum.KeyCode.W then
+				drone.CFrame = drone.CFrame * CFrame.new(0, 0, -1)
+			elseif key == Enum.KeyCode.S then
+				drone.CFrame = drone.CFrame * CFrame.new(0, 0, 1)
+			elseif key == Enum.KeyCode.A then
+				drone.CFrame = drone.CFrame * CFrame.new(-1, 0, 0)
+			elseif key == Enum.KeyCode.D then
+				drone.CFrame = drone.CFrame * CFrame.new(1, 0, 0)
+			end
+			task.wait(0.02)
 		end
 	end)
-	btn.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			hold[key] = false
-			recomputeDir()
-		end
+	btn.MouseButton1Up:Connect(function()
+		moving = false
 	end)
 end
 
-addHold(forwardBtn, "forward")
-addHold(backBtn, "back")
-addHold(rightBtn, "right")
-addHold(leftBtn, "left")
-addHold(upBtn, "up")
-addHold(downBtn, "down")
-
-local speed = 1.6
-RunService.RenderStepped:Connect(function(dt)
-	if dir.Magnitude > 0 then
-		local cf = camera.CFrame
-		local f = cf.LookVector
-		local r = cf.RightVector
-		local move = (r * dir.X) + (f * dir.Z) + (Vector3.new(0,1,0) * dir.Y)
-		drone.CFrame = drone.CFrame + move * speed * dt * 60
+-- زر الرجوع
+exitButton.MouseButton1Click:Connect(function()
+	droneActive = not droneActive
+	for _, btn in pairs(buttons) do
+		btn.Visible = droneActive
 	end
+	exitButton.Text = droneActive and "رجوع" or "التحكم بالدرون"
 end)
 
--- stop movement when input ended globally (safety for keyboard)
-UserInputService.InputEnded:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.Keyboard then
-		-- clear all holds if keyboard ended (prevents stuck)
-		for k,_ in pairs(hold) do hold[k] = false end
-		recomputeDir()
-	end
-end)
-
--- === targeting: find closest player to circle center and draw beam ===
-local function getCircleCenter()
-	local pos = circle.AbsolutePosition
-	local size = circle.AbsoluteSize
-	return Vector2.new(pos.X + size.X/2, pos.Y + size.Y/2)
-end
-
-local function findClosestToPoint(point, maxDist)
-	maxDist = maxDist or 220
-	local best, bestD = nil, math.huge
-	for _,pl in pairs(Players:GetPlayers()) do
-		if pl ~= player and pl.Character and pl.Character:FindFirstChild("Head") and pl.Character:FindFirstChild("Humanoid") and pl.Character.Humanoid.Health > 0 then
-			local headPos = pl.Character.Head.Position
-			local vpos, onScreen = camera:WorldToViewportPoint(headPos)
+-- تتبع الهدف الأقرب
+game:GetService("RunService").RenderStepped:Connect(function()
+	local nearest, dist = nil, math.huge
+	for _, p in pairs(game.Players:GetPlayers()) do
+		if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+			local pos = p.Character.HumanoidRootPart.Position
+			local screenPos, onScreen = camera:WorldToViewportPoint(pos)
 			if onScreen then
-				local d = (Vector2.new(vpos.X, vpos.Y) - point).Magnitude
-				if d < bestD and d <= maxDist then
-					bestD = d
-					best = pl
+				local mousePos = Vector2.new(mouse.X, mouse.Y)
+				local d = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+				if d < dist then
+					dist = d
+					nearest = p
 				end
 			end
 		end
 	end
-	return best
-end
+	if nearest and nearest.Character and nearest.Character:FindFirstChild("Head") then
+		local startPos = (droneActive and drone.Position) or char.Head.Position
+		local endPos = nearest.Character.Head.Position
+		local startScreen = camera:WorldToViewportPoint(startPos)
+		local endScreen = camera:WorldToViewportPoint(endPos)
+		local dir = (Vector2.new(endScreen.X, endScreen.Y) - Vector2.new(startScreen.X, startScreen.Y))
+		local len = dir.Magnitude
+		local mid = (Vector2.new(startScreen.X, startScreen.Y) + Vector2.new(endScreen.X, endScreen.Y)) / 2
 
-local currentTarget = nil
-RunService.RenderStepped:Connect(function()
-	local center = getCircleCenter()
-	local target = findClosestToPoint(center, 240)
-	currentTarget = target
-	if target and target.Character and target.Character:FindFirstChild("Head") then
-		local headPos, onScreen = camera:WorldToViewportPoint(target.Character.Head.Position)
-		if onScreen then
-			beam.Visible = true
-			local headScreen = Vector2.new(headPos.X, headPos.Y)
-			local diff = headScreen - center
-			local len = diff.Magnitude
-			beam.Size = UDim2.new(0, 4, 0, math.max(4, len))
-			beam.Position = UDim2.fromOffset(center.X, center.Y)
-			beam.Rotation = math.deg(math.atan2(diff.Y, diff.X)) + 90
-		else
-			beam.Visible = false
-		end
-	else
-		beam.Visible = false
+		line.Position = UDim2.new(0, mid.X, 0, mid.Y)
+		line.Size = UDim2.new(0, 1, 0, len)
+		line.Rotation = math.deg(math.atan2(dir.Y, dir.X)) + 90
 	end
 end)
-
--- === shooting: build args dynamically (from player -> target.Head) ===
-local function buildAndFire(target)
-	if not target or not target.Character or not target.Character:FindFirstChild("Head") then return end
-	if not player.Character or not player.Character:FindFirstChild("Head") then return end
-
-	local fromHead = player.Character.Head
-	local toHead = target.Character.Head
-	local fromPos = Vector3.new(fromHead.Position.X, fromHead.Position.Y, fromHead.Position.Z)
-	local toPos = Vector3.new(toHead.Position.X, toHead.Position.Y, toHead.Position.Z)
-	local dirVec = toPos - fromPos
-	if dirVec.Magnitude == 0 then dirVec = Vector3.new(0,0,1) end
 	local dirUnit = dirVec.Unit
 
 	local args = {
