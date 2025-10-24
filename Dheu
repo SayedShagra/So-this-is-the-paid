@@ -1,0 +1,327 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+-------------------------
+-- GUI الأساسية (Aimbot/ESP/Items/Speed/WallHack)
+-------------------------
+local mainGui = Instance.new("ScreenGui")
+mainGui.Name = "MainGui"
+mainGui.ResetOnSpawn = false
+mainGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 270, 0, 320)
+mainFrame.Position = UDim2.new(0, 20, 0, 100)
+mainFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = mainGui
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0,15)
+mainCorner.Parent = mainFrame
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1,0,0,30)
+title.BackgroundTransparency = 1
+title.Text = "Stingray hub"
+title.Font = Enum.Font.SourceSansBold
+title.TextSize = 20
+title.TextColor3 = Color3.fromRGB(255,255,255)
+title.Parent = mainFrame
+
+local function createButton(text,posY)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 230, 0, 40)
+    btn.Position = UDim2.new(0, 20, 0, posY)
+    btn.BackgroundColor3 = Color3.fromRGB(255,255,255)
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(0,0,0)
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 16
+    btn.Parent = mainFrame
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0,10)
+    corner.Parent = btn
+    return btn
+end
+
+local function createBox(default,posY)
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(0,60,0,40)
+    box.Position = UDim2.new(0,190,0,posY)
+    box.BackgroundColor3 = Color3.fromRGB(30,30,30)
+    box.TextColor3 = Color3.fromRGB(255,255,255)
+    box.Text = default
+    box.Font = Enum.Font.SourceSans
+    box.TextSize = 16
+    box.ClearTextOnFocus = false
+    box.Parent = mainFrame
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0,10)
+    corner.Parent = box
+    return box
+end
+
+-- === AIMBOT ===
+local aimButton = createButton("AIMBOT",40)
+aimButton.MouseButton1Click:Connect(function()
+    loadstring(game:HttpGet("https://pastebin.com/raw/16490Mtf"))()
+end)
+
+-- === ESP ===
+local ESPButton = createButton("ESP",90)
+local ESPEnabled = false
+local ESPMarkers = {}
+local playerColors = {
+    Color3.fromRGB(255,0,0), Color3.fromRGB(0,255,0), Color3.fromRGB(0,0,255),
+    Color3.fromRGB(255,255,0), Color3.fromRGB(255,165,0), Color3.fromRGB(128,0,128),
+    Color3.fromRGB(0,255,255), Color3.fromRGB(255,192,203)
+}
+
+ESPButton.MouseButton1Click:Connect(function()
+    ESPEnabled = not ESPEnabled
+    ESPButton.Text = ESPEnabled and "إيقاف ESP 👁️" or "ESP"
+    for _, marker in pairs(ESPMarkers) do
+        marker.Enabled = ESPEnabled
+    end
+end)
+
+task.spawn(function()
+    while true do
+        if ESPEnabled then
+            for i, player in ipairs(Players:GetPlayers()) do
+                if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
+                    if not ESPMarkers[player] then
+                        local Billboard = Instance.new("BillboardGui")
+                        Billboard.Name = "ESPMarker"
+                        Billboard.Adornee = player.Character.Head
+                        Billboard.Size = UDim2.new(0,10,0,10)
+                        Billboard.AlwaysOnTop = true
+                        Billboard.StudsOffset = Vector3.new(0,2,0)
+                        Billboard.Parent = mainGui
+
+                        local Dot = Instance.new("Frame")
+                        Dot.Size = UDim2.new(1,0,1,0)
+                        Dot.BackgroundColor3 = playerColors[(i-1)%#playerColors+1]
+                        Dot.BorderSizePixel = 0
+                        Dot.Parent = Billboard
+
+                        ESPMarkers[player] = Billboard
+                    else
+                        ESPMarkers[player].Adornee = player.Character.Head
+                        ESPMarkers[player].Enabled = true
+                    end
+                elseif ESPMarkers[player] then
+                    ESPMarkers[player].Enabled = false
+                end
+            end
+        end
+        task.wait(0.5)
+    end
+end)
+
+-- === ITEMS ===
+local ItemsButton = createButton("ITEMS",140)
+local SizeBox = createBox("14",140)
+local ItemsEnabled = false
+local ItemMarkers = {}
+ItemsButton.MouseButton1Click:Connect(function() ItemsEnabled = not ItemsEnabled end)
+
+SizeBox:GetPropertyChangedSignal("Text"):Connect(function()
+    local textSize = tonumber(SizeBox.Text) or 14
+    for _, lbl in pairs(ItemMarkers) do
+        if lbl and lbl:IsA("TextLabel") then
+            lbl.TextSize = textSize
+        end
+    end
+end)
+
+task.spawn(function()
+    while true do
+        if ItemsEnabled then
+            local textSize = tonumber(SizeBox.Text) or 14
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player ~= LocalPlayer and player.Character then
+                    local allItems = {}
+                    if player:FindFirstChild("Backpack") then
+                        for _, tool in ipairs(player.Backpack:GetChildren()) do
+                            table.insert(allItems, tool.Name)
+                        end
+                    end
+                    for _, tool in ipairs(player.Character:GetChildren()) do
+                        if tool:IsA("Tool") then table.insert(allItems, tool.Name) end
+                    end
+                    local combined = table.concat(allItems, ", ")
+                    if not ItemMarkers[player] then
+                        local Billboard = Instance.new("BillboardGui")
+                        Billboard.Adornee = player.Character:FindFirstChild("Head") or player.Character:FindFirstChildWhichIsA("BasePart")
+                        Billboard.Size = UDim2.new(0,150,0,20)
+                        Billboard.AlwaysOnTop = true
+                        Billboard.StudsOffset = Vector3.new(0,3,0)
+                        Billboard.Parent = mainGui
+
+                        local TextLabel = Instance.new("TextLabel")
+                        TextLabel.Size = UDim2.new(1,0,1,0)
+                        TextLabel.BackgroundTransparency = 1
+                        TextLabel.Text = combined
+                        TextLabel.TextColor3 = Color3.fromRGB(255,255,255)
+                        TextLabel.Font = Enum.Font.SourceSansBold
+                        TextLabel.TextSize = textSize
+                        TextLabel.TextTruncate = Enum.TextTruncate.AtEnd
+                        TextLabel.Parent = Billboard
+
+                        ItemMarkers[player] = TextLabel
+                    else
+                        ItemMarkers[player].Text = combined
+                        ItemMarkers[player].TextSize = textSize
+                    end
+                end
+            end
+        end
+        task.wait(0.5)
+    end
+end)
+
+-- === SPEED ===
+local SpeedButton = createButton("SPEED",190)
+local SpeedBox = createBox("30",190)
+local SpeedEnabled = false
+SpeedButton.MouseButton1Click:Connect(function()
+    SpeedEnabled = not SpeedEnabled
+    SpeedButton.Text = SpeedEnabled and "ايقاف" or "سرعة"
+end)
+
+task.spawn(function()
+    while true do
+        if SpeedEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            local speed = tonumber(SpeedBox.Text) or 16
+            pcall(function() LocalPlayer.Character.Humanoid.WalkSpeed = speed end)
+        end
+        task.wait(0.1)
+    end
+end)
+
+-- === زر اختراق جدران ===
+local WallHackButton = createButton("اختراق جدران",240)
+WallHackButton.MouseButton1Click:Connect(function()
+    local ws = workspace
+    local playerName = game.Players.LocalPlayer.Name
+    for _, obj in ipairs(ws:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            local size = obj.Size
+            local isFloorLike = (size.X > 100 and size.Z > 100 and size.Y < 10)
+            local lowerName = string.lower(obj.Name)
+            local protectCar = lowerName:find("car") or lowerName:find(string.lower(playerName))
+            if isFloorLike or protectCar then
+                obj.CanCollide = true
+            else
+                obj.CanCollide = false
+            end
+        end
+    end
+end)
+
+-- === زر Steal car ===
+local StealCarButton = createButton("Steal car",290)
+StealCarButton.MouseButton1Click:Connect(function()
+    loadstring(game:HttpGet("https://pastebin.com/raw/ef0Cg29N"))()
+end)
+
+-------------------------
+-- GUI مستقلة للـ AntiKill (ما تغيّر فيها شيء)
+-------------------------
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "AntiKillGui"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = PlayerGui
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 220, 0, 100)
+MainFrame.Position = UDim2.new(0.4, 0, 0.4, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0,12)
+UICorner.Parent = MainFrame
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1,0,0,30)
+Title.BackgroundTransparency = 1
+Title.Text = "Anti Kill"
+Title.TextColor3 = Color3.fromRGB(0,0,0)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 18
+Title.Parent = MainFrame
+
+local Button = Instance.new("TextButton")
+Button.Size = UDim2.new(0.9, 0, 0, 40)
+Button.Position = UDim2.new(0.05, 0, 0.5, -20)
+Button.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
+Button.TextColor3 = Color3.fromRGB(0,0,0)
+Button.Font = Enum.Font.Gotham
+Button.TextSize = 16
+Button.Text = "سبام تحت الأرض (إيقاف)"
+Button.Parent = MainFrame
+
+local ButtonCorner = Instance.new("UICorner")
+ButtonCorner.CornerRadius = UDim.new(0,8)
+ButtonCorner.Parent = Button
+
+local manualSpam = false
+local autoSpam = false
+
+local function teleportUnderGround()
+    local char = LocalPlayer.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        local hrp = char.HumanoidRootPart
+        local pos = hrp.Position
+        hrp.CFrame = CFrame.new(pos.X, -50, pos.Z)
+    end
+end
+
+task.spawn(function()
+    while true do
+        if manualSpam or autoSpam then
+            teleportUnderGround()
+        end
+        task.wait(0.05)
+    end
+end)
+
+Button.MouseButton1Click:Connect(function()
+    manualSpam = not manualSpam
+    if manualSpam then
+        Button.Text = "سبام تحت الأرض (تشغيل)"
+        Button.BackgroundColor3 = Color3.fromRGB(150, 255, 150)
+    else
+        Button.Text = "سبام تحت الأرض (إيقاف)"
+        Button.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
+    end
+end)
+
+local function monitorHealth()
+    local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum.HealthChanged:Connect(function(health)
+            if health < 40 then
+                autoSpam = true
+            else
+                autoSpam = false
+            end
+        end)
+    end
+end
+
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(1)
+    monitorHealth()
+end)
+
+monitorHealth()
