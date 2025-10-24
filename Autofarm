@@ -1,0 +1,427 @@
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+local char = player.Character or player.CharacterAdded:Wait()
+local humanoid = char:WaitForChild("Humanoid")
+
+local healthThreshold = 60
+local checkInterval = 0.1
+local spamInterval = 0.5
+local skyY = 5000
+local skySize = Vector3.new(2000,10,2000)
+local skyPartName = "SkyCoverPart_Massive"
+local carName = player.Name.."'s Car"
+local carsFolder = Workspace:FindFirstChild("Cars") or Workspace:WaitForChild("Cars",5)
+local delayTime = 0.6
+
+local function safeGetNet()
+    local ok, result = pcall(function()
+        return ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_net@0.2.0"):WaitForChild("net")
+    end)
+    if ok then return result end
+    local alt = ReplicatedStorage:FindFirstChild("net") or ReplicatedStorage:FindFirstChild("Net")
+    return alt
+end
+local net = safeGetNet()
+local JobRemote = (net and net:FindFirstChild("RE/Job")) or (net and net:FindFirstChild("Job")) or nil
+local BankEvent = (net and net:FindFirstChild("RF/BankEvent")) or (net and net:FindFirstChild("BankEvent")) or nil
+local CarLock = (net and net:FindFirstChild("RE/CarLock")) or (net and net:FindFirstChild("CarLock")) or nil
+local RespawnEvent = (net and net:FindFirstChild("RE/RespawnEvent")) or (net and net:FindFirstChild("RespawnEvent")) or nil
+
+local cframe1 = CFrame.new(16.0793, 5.74903, 230.96521,
+    -0.946617067, -8.84905038e-09, 0.322360277,
+    -2.60815742e-08, 1, -4.91382295e-08,
+    -0.322360277, -5.49227508e-08, -0.946617067)
+
+local cframe2 = CFrame.new(-55.5387421, 5.76903534, 206.896118,
+    -0.212253138, 2.57485002e-08, 0.977214694,
+    5.3503274e-10, 1, -2.62326569e-08,
+    -0.977214694, -5.0451221e-09, -0.212253138)
+
+local running = false
+local spamRunning = false
+local autoFarmPaused = false
+local mainLoopActive = false
+local spamLoopActive = false
+
+local function ensureSkyPart()
+    local skyPart = Workspace:FindFirstChild(skyPartName)
+    if not skyPart then
+        skyPart = Instance.new("Part")
+        skyPart.Name = skyPartName
+        skyPart.Anchored = true
+        skyPart.CanCollide = true
+        skyPart.Size = skySize
+        skyPart.Position = Vector3.new(0, skyY, 0)
+        skyPart.Transparency = 0.2
+        skyPart.Parent = Workspace
+    end
+    return skyPart
+end
+local skyPart = ensureSkyPart()
+
+local function setCarPrimary(car)
+    if not car then return end
+    if not car.PrimaryPart then
+        local primary = car:FindFirstChild("Chassis") or car:FindFirstChildWhichIsA("BasePart")
+        car.PrimaryPart = primary
+    end
+end
+
+local function anchorCar(car, state)
+    if not car then return end
+    for _, p in ipairs(car:GetDescendants()) do
+        if p:IsA("BasePart") then
+            p.Anchored = state
+            if state then
+                p.AssemblyLinearVelocity = Vector3.zero
+                p.AssemblyAngularVelocity = Vector3.zero
+            end
+        end
+    end
+end
+
+local function moveCarToCFrame(car, cf)
+    if not car then return end
+    setCarPrimary(car)
+    if car.PrimaryPart then
+        car:SetPrimaryPartCFrame(cf)
+        for _, p in ipairs(car:GetDescendants()) do
+            if p:IsA("BasePart") then
+                p.AssemblyLinearVelocity = Vector3.zero
+                p.AssemblyAngularVelocity = Vector3.zero
+            end
+        end
+    end
+end
+
+local function findCar()
+    if not carsFolder then carsFolder = Workspace:FindFirstChild("Cars") end
+    if carsFolder then
+        return carsFolder:FindFirstChild(carName)
+    end
+    return nil
+end
+
+local function forceSitInSeat(car)
+    if not car then return false end
+    local seat = car:FindFirstChildWhichIsA("VehicleSeat") or car:FindFirstChildWhichIsA("Seat")
+    if seat then
+        pcall(function() seat:Sit(humanoid) end)
+        local t = 0
+        while t < 2 do
+            task.wait(0.1)
+            t = t + 0.1
+            if seat.Occupant == humanoid then return true end
+        end
+    end
+    return false
+end
+
+local function tryRespawnPlayer()
+    pcall(function()
+        if RespawnEvent then
+            RespawnEvent:FireServer()
+        else
+            player:LoadCharacter()
+        end
+    end)
+end
+
+local depositValue = "1000"
+local function spamLoop()
+    if spamLoopActive then return end
+    spamLoopActive = true
+    spamRunning = true
+    while spamRunning do
+        local n = tonumber(tostring(depositValue or ""))
+        if n and BankEvent then
+            pcall(function() BankEvent:InvokeServer("Deposit", n) end)
+        end
+        task.wait(spamInterval)
+    end
+    spamLoopActive = false
+end
+
+local function mainLoop()
+    if mainLoopActive then return end
+    mainLoopActive = true
+    if JobRemote then pcall(function() JobRemote:FireServer("Start","Crate") end) end
+    task.wait(0.6)
+    while running do
+        local car = findCar()
+        if car then
+            local seat = car:FindFirstChildWhichIsA("VehicleSeat") or car:FindFirstChildWhichIsA("Seat")
+            moveCarToCFrame(car, cframe1)
+            task.wait(delayTime)
+            pcall(function() humanoid.Sit = false end)
+            if char.PrimaryPart then
+                char:SetPrimaryPartCFrame(char.PrimaryPart.CFrame + Vector3.new((math.random(0,1)==0 and 2 or -2),0,0))
+            end
+            task.wait(0.5)
+            if JobRemote then pcall(function() JobRemote:FireServer("Event","Crate","TakeCrate") end) end
+            task.wait(0.5)
+            if seat then pcall(function() seat:Sit(humanoid) end) end
+            if CarLock then pcall(function() CarLock:FireServer(true) end) end
+            task.wait(0.5)
+            moveCarToCFrame(car, cframe2)
+            task.wait(delayTime)
+            pcall(function() humanoid.Sit = false end)
+            if char.PrimaryPart then
+                char:SetPrimaryPartCFrame(char.PrimaryPart.CFrame + Vector3.new((math.random(0,1)==0 and 2 or -2),0,0))
+            end
+            task.wait(0.5)
+            if JobRemote then pcall(function() JobRemote:FireServer("Event","Crate","Truck") end) end
+            task.wait(0.5)
+            if seat then pcall(function() seat:Sit(humanoid) end) end
+            task.wait(0.5)
+        else
+            task.wait(0.5)
+        end
+    end
+    mainLoopActive = false
+end
+
+local function healthMonitor(statusUpdater)
+    if humanoid.Health >= healthThreshold then
+        running = true
+        spamRunning = true
+        task.spawn(mainLoop)
+        task.spawn(spamLoop)
+        statusUpdater("Auto-started")
+    else
+        running = false
+        spamRunning = false
+        statusUpdater("Waiting: Health < "..tostring(healthThreshold))
+    end
+
+    while true do
+        task.wait(checkInterval)
+        local car = findCar()
+        local seat = car and (car:FindFirstChildWhichIsA("VehicleSeat") or car:FindFirstChildWhichIsA("Seat"))
+
+        if humanoid.Health < healthThreshold then
+            if not autoFarmPaused then
+                autoFarmPaused = true
+                running = false
+                spamRunning = false
+                statusUpdater("Health < "..tostring(healthThreshold).." — Pausing & moving car to sky")
+                if car and seat then
+                    forceSitInSeat(car)
+                    anchorCar(car, false)
+                    setCarPrimary(car)
+                    if car.PrimaryPart then
+                        local targetPos = skyPart.Position - Vector3.new(0, (skyPart.Size.Y/2 + (car.PrimaryPart.Size.Y/2) + 2), 0)
+                        car:SetPrimaryPartCFrame(CFrame.new(targetPos))
+                        task.wait(0.06)
+                        anchorCar(car, true)
+                    end
+                end
+            end
+        else
+            if autoFarmPaused then
+                autoFarmPaused = false
+                statusUpdater("Health >= "..tostring(healthThreshold).." — Resuming")
+                local car2 = findCar()
+                if car2 then
+                    anchorCar(car2, false)
+                    setCarPrimary(car2)
+                    if car2.PrimaryPart then
+                        local groundPos = Vector3.new(cframe1.Position.X, cframe1.Position.Y + 1, cframe1.Position.Z)
+                        car2:SetPrimaryPartCFrame(CFrame.new(groundPos))
+                        task.wait(0.08)
+                        anchorCar(car2, false)
+                    end
+                end
+                running = true
+                spamRunning = true
+                if not mainLoopActive then task.spawn(mainLoop) end
+                if not spamLoopActive then task.spawn(spamLoop) end
+            end
+        end
+
+        if seat and seat.Occupant == humanoid and car and car.PrimaryPart then
+            local dist = (car.PrimaryPart.Position - skyPart.Position).Magnitude
+            local thresholdDist = math.max(skyPart.Size.X, skyPart.Size.Z)/2 + 200
+            if dist <= thresholdDist then
+                running = false
+                spamRunning = false
+                autoFarmPaused = true
+                statusUpdater("Seated in sky car — AutoFarm stopped")
+            end
+        end
+    end
+end
+
+local function createGUI()
+    pcall(function()
+        local old = player:FindFirstChild("PlayerGui") and player.PlayerGui:FindFirstChild("StingrayHubGui")
+        if old then old:Destroy() end
+    end)
+
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "StingrayHubGui"
+    screenGui.ResetOnSpawn = false
+    screenGui.Parent = player:WaitForChild("PlayerGui")
+
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Size = UDim2.new(0,340,0,320)
+    mainFrame.Position = UDim2.new(0.5,-170,0.18,0)
+    mainFrame.AnchorPoint = Vector2.new(0.5,0)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(24,24,24)
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Parent = screenGui
+    Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0,14)
+
+    local title = Instance.new("TextLabel", mainFrame)
+    title.Size = UDim2.new(1, -20, 0, 48)
+    title.Position = UDim2.new(0,10,0,8)
+    title.BackgroundTransparency = 1
+    title.Text = "Stingray hub"
+    title.TextScaled = true
+    title.Font = Enum.Font.GothamBold
+    title.TextColor3 = Color3.fromRGB(255,255,255)
+
+    local statusLabel = Instance.new("TextLabel", mainFrame)
+    statusLabel.Size = UDim2.new(1, -20, 0, 28)
+    statusLabel.Position = UDim2.new(0,10,0,64)
+    statusLabel.BackgroundTransparency = 1
+    statusLabel.Text = "Initializing..."
+    statusLabel.Font = Enum.Font.Gotham
+    statusLabel.TextSize = 16
+    statusLabel.TextColor3 = Color3.fromRGB(200,200,200)
+    statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+    local sep = Instance.new("Frame", mainFrame)
+    sep.Size = UDim2.new(1, -20, 0, 2)
+    sep.Position = UDim2.new(0,10,0,96)
+    sep.BackgroundColor3 = Color3.fromRGB(40,40,40)
+    Instance.new("UICorner", sep).CornerRadius = UDim.new(0,4)
+
+    local depositBox = Instance.new("TextBox", mainFrame)
+    depositBox.Size = UDim2.new(0,300,0,36)
+    depositBox.Position = UDim2.new(0,20,0,108)
+    depositBox.PlaceholderText = "Deposit amount"
+    depositBox.Text = depositValue
+    depositBox.Font = Enum.Font.Gotham
+    depositBox.TextSize = 18
+    depositBox.ClearTextOnFocus = false
+    Instance.new("UICorner", depositBox).CornerRadius = UDim.new(0,8)
+
+    local healthBox = Instance.new("TextBox", mainFrame)
+    healthBox.Size = UDim2.new(0,140,0,36)
+    healthBox.Position = UDim2.new(0,20,0,156)
+    healthBox.PlaceholderText = "Health Threshold"
+    healthBox.Text = tostring(healthThreshold)
+    healthBox.Font = Enum.Font.Gotham
+    healthBox.TextSize = 16
+    Instance.new("UICorner", healthBox).CornerRadius = UDim.new(0,8)
+
+    local function createButton(text, y)
+        local b = Instance.new("TextButton", mainFrame)
+        b.Size = UDim2.new(0,300,0,40)
+        b.Position = UDim2.new(0,20,0,y)
+        b.BackgroundColor3 = Color3.fromRGB(255,255,255)
+        b.TextColor3 = Color3.fromRGB(24,24,24)
+        b.Font = Enum.Font.GothamBold
+        b.TextScaled = true
+        b.Text = text
+        b.AutoButtonColor = true
+        Instance.new("UICorner", b).CornerRadius = UDim.new(0,8)
+        return b
+    end
+
+    local startBtn = createButton("Start", 204)
+    local stopBtn = createButton("Stop", 256)
+
+    startBtn.MouseButton1Click:Connect(function()
+        local dv = tonumber(depositBox.Text)
+        if dv then depositValue = tostring(dv) end
+        if tonumber(healthBox.Text) then healthThreshold = tonumber(healthBox.Text) end
+        if not running then
+            running = true
+            spamRunning = true
+            if not mainLoopActive then task.spawn(mainLoop) end
+            if not spamLoopActive then task.spawn(spamLoop) end
+            statusLabel.Text = "Started by user"
+        else
+            statusLabel.Text = "Already running"
+        end
+    end)
+
+    stopBtn.MouseButton1Click:Connect(function()
+        running = false
+        spamRunning = false
+        statusLabel.Text = "Stopped by user"
+    end)
+
+    local function statusUpdater(txt)
+        pcall(function() statusLabel.Text = tostring(txt or "") end)
+    end
+
+    task.spawn(function() healthMonitor(statusUpdater) end)
+
+    do
+        local dragging = false
+        local dragInput = nil
+        local dragStart = nil
+        local startPos = nil
+
+        local function update(input)
+            local delta = input.Position - dragStart
+            mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+
+        mainFrame.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                dragStart = input.Position
+                startPos = mainFrame.Position
+                input.Changed:Connect(function()
+                    if input.UserInputState == Enum.UserInputState.End then
+                        dragging = false
+                    end
+                end)
+            end
+        end)
+
+        mainFrame.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+                dragInput = input
+            end
+        end)
+
+        UserInputService.InputChanged:Connect(function(input)
+            if input == dragInput and dragging and dragStart and startPos then
+                pcall(update, input)
+            end
+        end)
+
+        UserInputService.TouchMoved:Connect(function(touch, processed)
+            if processed then return end
+            if dragging and dragStart then
+                pcall(function()
+                    local delta = touch.Position - dragStart
+                    mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+                end)
+            end
+        end)
+    end
+
+    for i = 1, 5 do
+        pcall(function()
+            screenGui.ResetOnSpawn = false
+            screenGui.Parent = player:FindFirstChild("PlayerGui") or player:WaitForChild("PlayerGui")
+        end)
+        task.wait(0.1)
+    end
+
+    return screenGui, mainFrame, statusLabel
+end
+
+local gui, frame, statusLabel = createGUI()
