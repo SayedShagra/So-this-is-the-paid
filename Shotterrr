@@ -1,0 +1,209 @@
+-- Services
+local Players = game:GetService("Players")
+local RS = game:GetService("ReplicatedStorage")
+local Camera = workspace.CurrentCamera
+
+local LP = Players.LocalPlayer
+
+-- ======================
+-- إعدادات
+-- ======================
+local radiusPixels = 120
+local fireCount = 1
+
+-- ======================
+-- GUI
+-- ======================
+local gui = Instance.new("ScreenGui", LP.PlayerGui)
+gui.ResetOnSpawn = false
+
+-- إطار التحكم
+local panel = Instance.new("Frame", gui)
+panel.Size = UDim2.fromOffset(220, 190)
+panel.Position = UDim2.fromScale(0.5, 0.75)
+panel.AnchorPoint = Vector2.new(0.5, 0.5)
+panel.BackgroundColor3 = Color3.fromRGB(15,15,15)
+panel.BackgroundTransparency = 0.15
+panel.Active = true
+panel.Draggable = true
+
+Instance.new("UICorner", panel).CornerRadius = UDim.new(0,14)
+
+-- ======================
+-- دائرة في نص الشاشة
+-- ======================
+local circle = Instance.new("Frame", gui)
+circle.Size = UDim2.fromOffset(radiusPixels * 2, radiusPixels * 2)
+circle.Position = UDim2.fromScale(0.5, 0.5)
+circle.AnchorPoint = Vector2.new(0.5, 0.5)
+circle.BackgroundTransparency = 1
+circle.BorderSizePixel = 0
+
+Instance.new("UICorner", circle).CornerRadius = UDim.new(1,0)
+
+local stroke = Instance.new("UIStroke", circle)
+stroke.Color = Color3.fromRGB(255,255,255)
+stroke.Thickness = 2
+stroke.Transparency = 0.25
+
+-- ======================
+-- زر FIRE
+-- ======================
+local fireBtn = Instance.new("TextButton", panel)
+fireBtn.Size = UDim2.fromOffset(180, 36)
+fireBtn.Position = UDim2.fromOffset(20, 12)
+fireBtn.Text = "FIRE"
+fireBtn.Font = Enum.Font.GothamBold
+fireBtn.TextSize = 18
+fireBtn.BackgroundColor3 = Color3.fromRGB(255,255,255)
+fireBtn.TextColor3 = Color3.fromRGB(0,0,0)
+fireBtn.BorderSizePixel = 0
+
+Instance.new("UICorner", fireBtn).CornerRadius = UDim.new(0,10)
+
+-- ======================
+-- + / -
+-- ======================
+local plus = Instance.new("TextButton", panel)
+plus.Size = UDim2.fromOffset(40, 30)
+plus.Position = UDim2.fromOffset(20, 60)
+plus.Text = "+"
+plus.BackgroundColor3 = Color3.fromRGB(255,255,255)
+plus.TextColor3 = Color3.fromRGB(0,0,0)
+Instance.new("UICorner", plus).CornerRadius = UDim.new(0,8)
+
+local minus = Instance.new("TextButton", panel)
+minus.Size = UDim2.fromOffset(40, 30)
+minus.Position = UDim2.fromOffset(70, 60)
+minus.Text = "-"
+minus.BackgroundColor3 = Color3.fromRGB(255,255,255)
+minus.TextColor3 = Color3.fromRGB(0,0,0)
+Instance.new("UICorner", minus).CornerRadius = UDim.new(0,8)
+
+local rLabel = Instance.new("TextLabel", panel)
+rLabel.Size = UDim2.fromOffset(90, 30)
+rLabel.Position = UDim2.fromOffset(120, 60)
+rLabel.Text = "R: "..radiusPixels
+rLabel.TextColor3 = Color3.fromRGB(255,255,255)
+rLabel.BackgroundTransparency = 1
+rLabel.Font = Enum.Font.Gotham
+
+-- ======================
+-- عدد الإرسال
+-- ======================
+local countBox = Instance.new("TextBox", panel)
+countBox.Size = UDim2.fromOffset(180, 32)
+countBox.Position = UDim2.fromOffset(20, 110)
+countBox.Text = "1"
+countBox.PlaceholderText = "عدد الإرسال"
+countBox.BackgroundColor3 = Color3.fromRGB(255,255,255)
+countBox.TextColor3 = Color3.fromRGB(0,0,0)
+countBox.ClearTextOnFocus = false
+
+Instance.new("UICorner", countBox).CornerRadius = UDim.new(0,8)
+
+-- ======================
+-- تحكم الدائرة
+-- ======================
+local function updateCircle()
+	circle.Size = UDim2.fromOffset(radiusPixels * 2, radiusPixels * 2)
+	rLabel.Text = "R: "..radiusPixels
+end
+
+plus.MouseButton1Click:Connect(function()
+	radiusPixels += 20
+	updateCircle()
+end)
+
+minus.MouseButton1Click:Connect(function()
+	radiusPixels = math.max(40, radiusPixels - 20)
+	updateCircle()
+end)
+
+countBox:GetPropertyChangedSignal("Text"):Connect(function()
+	local n = tonumber(countBox.Text)
+	if n then fireCount = math.clamp(n,1,20) end
+end)
+
+-- ======================
+-- اختيار لاعب داخل دائرة GUI
+-- ======================
+local function getTargetInCircle()
+	local center = circle.AbsolutePosition + (circle.AbsoluteSize / 2)
+	local nearest, best = nil, math.huge
+
+	for _,p in ipairs(Players:GetPlayers()) do
+		if p ~= LP and p.Character and p.Character:FindFirstChild("Head") then
+			local screenPos, onScreen = Camera:WorldToViewportPoint(p.Character.Head.Position)
+			if onScreen then
+				local dist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+				if dist <= radiusPixels and dist < best then
+					best = dist
+					nearest = p
+				end
+			end
+		end
+	end
+	return nearest
+end
+
+-- ======================
+-- Beam
+-- ======================
+local function drawBeam(h1, h2)
+	local a0 = Instance.new("Attachment", h1)
+	local a1 = Instance.new("Attachment", h2)
+
+	local beam = Instance.new("Beam")
+	beam.Attachment0 = a0
+	beam.Attachment1 = a1
+	beam.Width0 = 0.15
+	beam.Width1 = 0.15
+	beam.Color = ColorSequence.new(Color3.fromRGB(255,0,0))
+	beam.Parent = h1
+
+	task.delay(0.25, function()
+		beam:Destroy()
+	end)
+end
+
+-- ======================
+-- FIRE
+-- ======================
+fireBtn.MouseButton1Click:Connect(function()
+	local char = LP.Character
+	if not char then return end
+
+	local myHRP = char:FindFirstChild("HumanoidRootPart")
+	local myHead = char:FindFirstChild("Head")
+	if not myHRP or not myHead then return end
+
+	local target = getTargetInCircle()
+	if not target or not target.Character then return end
+
+	local tHRP = target.Character.HumanoidRootPart
+	local tHead = target.Character.Head
+	local dir = (tHRP.Position - myHRP.Position).Unit
+
+	drawBeam(myHead, tHead)
+
+	for i = 1, fireCount do
+		local aimPath = {}
+		for j = 1,10 do
+			local pos = myHRP.Position + dir * (j * 3)
+			aimPath[#aimPath+1] = CFrame.new(pos, pos + dir)
+		end
+
+		RS.FireWeaponEvent:FireServer({
+			inputType = "Mobile",
+			originCFrame = CFrame.new(myHRP.Position, tHRP.Position),
+			target = target,
+			ignoreParts = {char},
+			serverTime = os.clock(),
+			aimPath = aimPath
+		})
+
+		RS.Modules.Packages._Index["sleitnick_net@0.2.0"].net["RE/GunRemote"]
+		:FireServer("Shoot", tHead, myHRP.Position, dir, Enum.Material.Plastic)
+	end
+end)
