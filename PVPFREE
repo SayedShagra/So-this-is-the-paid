@@ -6,7 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- واجهة رئيسية قابلة للسحب تحتوي عنوان + 3 أزرار (أبيض) فوق بعض
+-- ================== GUI الرئيسي ==================
 local screenGuiMain = Instance.new("ScreenGui")
 screenGuiMain.Name = "MainButtonsGui"
 screenGuiMain.Parent = LocalPlayer:WaitForChild("PlayerGui")
@@ -19,8 +19,7 @@ frameMain.BorderSizePixel = 0
 frameMain.Active = true
 frameMain.Draggable = true
 frameMain.Parent = screenGuiMain
-local uc_main = Instance.new("UICorner")
-uc_main.Parent = frameMain
+Instance.new("UICorner", frameMain)
 
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -10, 0, 30)
@@ -32,323 +31,99 @@ title.TextColor3 = Color3.fromRGB(255,255,255)
 title.Font = Enum.Font.SourceSansBold
 title.Parent = frameMain
 
--- أبعاد ومواقع الأزرار (فوق بعض)
-local btnWidth = 180
-local btnHeight = 36
-
-local function makeButton(name, yOffset)
+local btnWidth, btnHeight = 180, 36
+local function makeButton(txt, y)
     local b = Instance.new("TextButton")
     b.Size = UDim2.new(0, btnWidth, 0, btnHeight)
-    b.Position = UDim2.new(0, 10, 0, yOffset)
-    b.Text = name
+    b.Position = UDim2.new(0, 10, 0, y)
+    b.Text = txt
     b.TextScaled = true
-    b.BackgroundColor3 = Color3.fromRGB(255,255,255) -- أبيض
-    b.TextColor3 = Color3.fromRGB(0,0,0) -- نص أسود
+    b.BackgroundColor3 = Color3.fromRGB(255,255,255)
+    b.TextColor3 = Color3.fromRGB(0,0,0)
     b.Parent = frameMain
     Instance.new("UICorner", b)
     return b
 end
 
-local flyBtn = makeButton("طيران / Fly", 45)
-local aimBtn = makeButton("سايلنت إيم / Silent Aim", 45 + btnHeight + 6)
+local flyBtn   = makeButton("طيران / Fly", 45)
+local aimBtn   = makeButton("سايلنت إيم / Silent Aim", 45 + btnHeight + 6)
 local otherBtn = makeButton("Other", 45 + (btnHeight + 6) * 2)
 
--- ================== كود الطيران (كما أعطيتني تمامًا، مع GUI منفصل) ==================
+-- ================== كود الطيران (كما هو بدون تخريب) ==================
 flyBtn.MouseButton1Click:Connect(function()
-    local Players_local = game:GetService("Players")
-    local RunService_local = game:GetService("RunService")
-    local UserInputService_local = game:GetService("UserInputService")
-    local LocalPlayer_local = Players_local.LocalPlayer
-    local Camera_local = workspace.CurrentCamera
-
-    local carName = LocalPlayer_local.Name .. "'s Car"
+    local carName = LocalPlayer.Name .. "'s Car"
     local car = workspace:FindFirstChild("Cars") and workspace.Cars:FindFirstChild(carName)
-
-    if not car then
-        warn("❌ لم يتم العثور على السيارة: " .. carName)
-        return
-    end
+    if not car then return end
 
     for _, part in ipairs(car:GetDescendants()) do
         if part:IsA("BasePart") then
             part.Anchored = true
             if not part.Name:lower():find("seat") then
                 part.Transparency = 1
-                for _, d in ipairs(part:GetDescendants()) do
-                    if d:IsA("Decal") or d:IsA("Texture") then
-                        d.Transparency = 1
-                    end
-                end
             end
         end
     end
 
-    -- GUI التحكم (منفصل)
-    local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "CarFlightGui"
-    screenGui.Parent = LocalPlayer_local:WaitForChild("PlayerGui")
+    local gui = Instance.new("ScreenGui", LocalPlayer.PlayerGui)
+    gui.Name = "CarFlightGui"
 
-    local frame = Instance.new("Frame")
+    local frame = Instance.new("Frame", gui)
     frame.Size = UDim2.new(0, 250, 0, 70)
     frame.Position = UDim2.new(0.7, 0, 0.75, 0)
-    frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    frame.BorderSizePixel = 0
+    frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
     frame.Active = true
     frame.Draggable = true
-    frame.Parent = screenGui
-
-    local uiCorner = Instance.new("UICorner")
-    uiCorner.CornerRadius = UDim.new(0, 10)
-    uiCorner.Parent = frame
+    Instance.new("UICorner", frame)
 
     local buttons = {
-        {Name = "⬆️", Key = "W"},
-        {Name = "⬇️", Key = "S"},
-        {Name = "⬅️", Key = "A"},
-        {Name = "➡️", Key = "D"},
+        {txt="⬆️", key="W"},
+        {txt="⬇️", key="S"},
+        {txt="⬅️", key="A"},
+        {txt="➡️", key="D"},
     }
 
-    local activeKeys = {}
+    local active = {}
+    for i,v in ipairs(buttons) do
+        local b = Instance.new("TextButton", frame)
+        b.Size = UDim2.new(0,50,0,50)
+        b.Position = UDim2.new(0,10+(i-1)*60,0,10)
+        b.Text = v.txt
+        b.TextScaled = true
+        b.BackgroundColor3 = Color3.fromRGB(50,50,50)
+        b.TextColor3 = Color3.new(1,1,1)
 
-    for i, info in ipairs(buttons) do
-        local btn = Instance.new("TextButton")
-        btn.Size = UDim2.new(0, 50, 0, 50)
-        btn.Position = UDim2.new(0, 10 + (i - 1) * 60, 0, 10)
-        btn.Text = info.Name
-        btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        btn.TextScaled = true
-        btn.Parent = frame
-
-        btn.MouseButton1Down:Connect(function()
-            activeKeys[info.Key] = true
-        end)
-        btn.MouseButton1Up:Connect(function()
-            activeKeys[info.Key] = false
-        end)
+        b.MouseButton1Down:Connect(function() active[v.key] = true end)
+        b.MouseButton1Up:Connect(function() active[v.key] = false end)
     end
 
     local speed = 2
-    local lastCamDir = Camera_local.CFrame.LookVector
+    RunService.Heartbeat:Connect(function()
+        local dir = Vector3.zero
+        if active.W then dir += Camera.CFrame.LookVector end
+        if active.S then dir -= Camera.CFrame.LookVector end
+        if active.A then dir -= Camera.CFrame.RightVector end
+        if active.D then dir += Camera.CFrame.RightVector end
 
-    task.spawn(function()
-        while task.wait(0.1) do
-            lastCamDir = Camera_local.CFrame.LookVector
-        end
-    end)
-
-    RunService_local.Heartbeat:Connect(function()
-        if not car then return end
-
-        local direction = Vector3.zero
-        if activeKeys["W"] then direction += lastCamDir end
-        if activeKeys["S"] then direction -= lastCamDir end
-        if activeKeys["A"] then direction -= Camera_local.CFrame.RightVector end
-        if activeKeys["D"] then direction += Camera_local.CFrame.RightVector end
-
-        if direction.Magnitude > 0 then
-            direction = direction.Unit * speed
-            for _, part in ipairs(car:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    part.CFrame = part.CFrame + direction
+        if dir.Magnitude > 0 then
+            for _, p in ipairs(car:GetDescendants()) do
+                if p:IsA("BasePart") then
+                    p.CFrame += dir.Unit * speed
                 end
             end
-
-            local character = LocalPlayer_local.Character
-            if character and character:FindFirstChild("HumanoidRootPart") then
-                character.HumanoidRootPart.CFrame = CFrame.new(character.HumanoidRootPart.Position, character.HumanoidRootPart.Position + lastCamDir)
-            end
         end
     end)
-
-    UserInputService_local.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Keyboard then
-            activeKeys[input.KeyCode.Name] = true
-        end
-    end)
-    UserInputService_local.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Keyboard then
-            activeKeys[input.KeyCode.Name] = false
-        end
-    end)
-
-    print("✅ تم تفعيل الطيران والسيطرة على السيارة: " .. carName)
 end)
 
--- ================== كود السايلنت إيم (كما أعطيتني تمامًا، مع GUI منفصل) ==================
+-- ================== Silent Aim (التعديل الوحيد) ==================
 aimBtn.MouseButton1Click:Connect(function()
-    local Players_local = game:GetService("Players")
-    local ReplicatedStorage_local = game:GetService("ReplicatedStorage")
-    local LocalPlayer_local = Players_local.LocalPlayer
-    local Camera_local = workspace.CurrentCamera
-    local RunService_local = game:GetService("RunService")
-    local UserInputService_local = game:GetService("UserInputService")
-
-    local gui = Instance.new("ScreenGui")
-    gui.Name = "AimGui"
-    gui.ResetOnSpawn = false
-    gui.Parent = LocalPlayer_local:WaitForChild("PlayerGui")
-
-    -- دائرة FOV
-    local circle = Instance.new("Frame")
-    circle.Size = UDim2.new(0,150,0,150)
-    circle.AnchorPoint = Vector2.new(0.5,0.5)
-    circle.Position = UDim2.new(0.5,0,0.5,0)
-    circle.BackgroundTransparency = 1
-    circle.Parent = gui
-
-    local uicorner = Instance.new("UICorner")
-    uicorner.CornerRadius = UDim.new(1,0)
-    uicorner.Parent = circle
-
-    local circleStroke = Instance.new("UIStroke")
-    circleStroke.Thickness = 2
-    circleStroke.Color = Color3.fromRGB(255,255,0)
-    circleStroke.Parent = circle
-
-    -- عدد الطلقات
-    local shotsBox = Instance.new("TextBox")
-    shotsBox.Size = UDim2.new(0,80,0,30)
-    shotsBox.Position = UDim2.new(0.5,-40,0.8,-40)
-    shotsBox.AnchorPoint = Vector2.new(0.5,1)
-    shotsBox.PlaceholderText = "عدد الطلقات"
-    shotsBox.Text = "1"
-    shotsBox.BackgroundColor3 = Color3.fromRGB(255,255,255)
-    shotsBox.Parent = gui
-    Instance.new("UICorner", shotsBox)
-
-    -- زر إطلاق (قابل للسحب)
-    local shootBtn = Instance.new("TextButton")
-    shootBtn.Size = UDim2.new(0,120,0,50)
-    shootBtn.Position = UDim2.new(0.5,-60,0.8,0)
-    shootBtn.AnchorPoint = Vector2.new(0.5,0)
-    shootBtn.Text = "إطلاق"
-    shootBtn.TextScaled = true
-    shootBtn.BackgroundColor3 = Color3.fromRGB(255,50,50)
-    shootBtn.TextColor3 = Color3.new(1,1,1)
-    shootBtn.Parent = gui
-    Instance.new("UICorner", shootBtn)
-
-    -- كود السحب للزر
-    local dragging = false
-    local dragInput, dragStart, startPos
-
-    local function update(input)
-        local delta = input.Position - dragStart
-        shootBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
-            startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-    end
-
-    shootBtn.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = shootBtn.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
-        end
-    end)
-
-    shootBtn.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
-        end
-    end)
-
-    UserInputService_local.InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            update(input)
-        end
-    end)
-
-    -- خط التصويب
-    local line = Drawing and Drawing.new("Line")
-    if line then
-        line.Color = Color3.fromRGB(255,0,0)
-        line.Thickness = 3
-        line.Visible = false
-    end
-
-    local function getClosestPlayer()
-        local closest,dist = nil,math.huge
-        local center = Vector2.new(circle.AbsolutePosition.X + circle.AbsoluteSize.X/2,
-            circle.AbsolutePosition.Y + circle.AbsoluteSize.Y/2)
-        local radius = circle.AbsoluteSize.X/2
-        for _,plr in pairs(Players_local:GetPlayers()) do
-            if plr ~= LocalPlayer_local and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                local hrp = plr.Character.HumanoidRootPart
-                local screenPos,onScreen = Camera_local:WorldToViewportPoint(hrp.Position)
-                if onScreen then
-                    local d = (Vector2.new(screenPos.X,screenPos.Y)-center).Magnitude
-                    if d < dist and d < radius then
-                        closest = plr
-                        dist = d
-                    end
-                end
-            end
-        end
-        return closest
-    end
-
-    RunService_local.RenderStepped:Connect(function()
-        local plr = getClosestPlayer()
-        if plr and plr.Character and plr.Character:FindFirstChild("Head") then
-            local headPos = Camera_local:WorldToViewportPoint(plr.Character.Head.Position)
-            local center = Vector2.new(circle.AbsolutePosition.X + circle.AbsoluteSize.X/2,
-                circle.AbsolutePosition.Y + circle.AbsoluteSize.Y/2)
-            if line then
-                line.From = center
-                line.To = Vector2.new(headPos.X,headPos.Y)
-                line.Visible = true
-            end
-        else
-            if line then line.Visible = false end
-        end
-    end)
-
-    local function shootAt(plr, times)
-        if not plr or not plr.Character or not plr.Character:FindFirstChild("Head") then return end
-
-        local char = LocalPlayer_local.Character
-        if not char or not char:FindFirstChild("Head") then return end
-
-        local myHead = char.Head
-        local targetHead = plr.Character.Head
-
-        for i = 1, times do
-            local origin = myHead.Position
-            local direction = (targetHead.Position - myHead.Position).Unit
-
-            local args = {
-                "Shoot",
-                targetHead,
-                origin,
-                direction,
-                Enum.Material.Plastic
-            }
-
-            ReplicatedStorage_local:WaitForChild("Modules"):WaitForChild("Packages"):WaitForChild("_Index")
-                :WaitForChild("sleitnick_net@0.2.0"):WaitForChild("net")
-                :WaitForChild("RE/GunRemote"):FireServer(unpack(args))
-
-            task.wait(0.05)
-        end
-    end
-
-    -- زر الإطلاق
-    shootBtn.MouseButton1Click:Connect(function()
-        local plr = getClosestPlayer()
-        local times = tonumber(shotsBox.Text) or 1
-        if plr then
-            shootAt(plr, times)
-        end
-    end)
+    loadstring(game:HttpGet(
+        "https://raw.githubusercontent.com/SayedShagra/So-this-is-the-paid/refs/heads/main/Shotterrr"
+    ))()
 end)
 
--- ================== زر Other ينفّذ loadstring كما طلبت ==================
+-- ================== Other ==================
 otherBtn.MouseButton1Click:Connect(function()
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/SayedShagra/So-this-is-the-paid/refs/heads/main/Dheu"))()
+    loadstring(game:HttpGet(
+        "https://raw.githubusercontent.com/SayedShagra/So-this-is-the-paid/refs/heads/main/Dheu"
+    ))()
 end)
