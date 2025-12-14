@@ -1,129 +1,109 @@
--- الخدمات الأساسية
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local LocalPlayer = Players.LocalPlayer
-local Camera = workspace.CurrentCamera
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
--- ================== GUI الرئيسي ==================
-local screenGuiMain = Instance.new("ScreenGui")
-screenGuiMain.Name = "MainButtonsGui"
-screenGuiMain.Parent = LocalPlayer:WaitForChild("PlayerGui")
+-- إنشاء النافذة الرئيسية
+local Window = Rayfield:CreateWindow({
+   Name = "Stingray Hub",
+   LoadingTitle = "Stingray Hub Loading...",
+   LoadingSubtitle = "By A7xDev",
+   ConfigurationSaving = {
+      Enabled = true,
+      FolderName = "StingrayHubConfig",
+      FileName = "StingrayManager"
+   },
+   Discord = {
+      Enabled = false,
+      Invite = "noinvitelink",
+      RememberJoins = true 
+   },
+   KeySystem = false, -- تم تعطيل نظام المفاتيح لسهولة الدخول
+})
 
-local frameMain = Instance.new("Frame")
-frameMain.Size = UDim2.new(0, 200, 0, 200)
-frameMain.Position = UDim2.new(0.7, 0, 0.7, 0)
-frameMain.BackgroundColor3 = Color3.fromRGB(30,30,30)
-frameMain.BorderSizePixel = 0
-frameMain.Active = true
-frameMain.Draggable = true
-frameMain.Parent = screenGuiMain
-Instance.new("UICorner", frameMain)
+-- =============================================
+-- Tab 1: General (ESP & Items)
+-- =============================================
+local GeneralTab = Window:CreateTab("General", 4483362458)
+local GeneralSection = GeneralTab:CreateSection("Visuals")
 
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -10, 0, 30)
-title.Position = UDim2.new(0, 5, 0, 5)
-title.BackgroundTransparency = 1
-title.Text = "Stingray hub"
-title.TextScaled = true
-title.TextColor3 = Color3.fromRGB(255,255,255)
-title.Font = Enum.Font.SourceSansBold
-title.Parent = frameMain
+GeneralTab:CreateButton({
+   Name = "Load ESP + Items",
+   Callback = function()
+       Rayfield:Notify({
+           Title = "Loading Script",
+           Content = "Please wait, loading ESP...",
+           Duration = 3,
+           Image = 4483362458,
+       })
+       
+       -- تشغيل السكربت
+       local success, err = pcall(function()
+           loadstring(game:HttpGet("https://raw.githubusercontent.com/SayedShagra/So-this-is-the-paid/refs/heads/main/ESP"))()
+       end)
+       
+       if success then
+           Rayfield:Notify({Title = "Success", Content = "ESP Script Loaded!", Duration = 3})
+       else
+           Rayfield:Notify({Title = "Error", Content = "Check F9 Console", Duration = 5})
+           warn("ESP Error: " .. tostring(err))
+       end
+   end,
+})
 
-local btnWidth, btnHeight = 180, 36
-local function makeButton(txt, y)
-    local b = Instance.new("TextButton")
-    b.Size = UDim2.new(0, btnWidth, 0, btnHeight)
-    b.Position = UDim2.new(0, 10, 0, y)
-    b.Text = txt
-    b.TextScaled = true
-    b.BackgroundColor3 = Color3.fromRGB(255,255,255)
-    b.TextColor3 = Color3.fromRGB(0,0,0)
-    b.Parent = frameMain
-    Instance.new("UICorner", b)
-    return b
-end
+-- =============================================
+-- Tab 2: Car Modded (Fly)
+-- =============================================
+local CarTab = Window:CreateTab("Car Modded", 4483362458)
+local CarSection = CarTab:CreateSection("Movement")
 
-local flyBtn   = makeButton("طيران / Fly", 45)
-local aimBtn   = makeButton("سايلنت إيم / Silent Aim", 45 + btnHeight + 6)
-local otherBtn = makeButton("Other", 45 + (btnHeight + 6) * 2)
+CarTab:CreateButton({
+   Name = "Load Fly (Car/Player)",
+   Callback = function()
+       Rayfield:Notify({
+           Title = "Loading Script",
+           Content = "Loading Fly script...",
+           Duration = 3,
+           Image = 4483362458,
+       })
 
--- ================== كود الطيران (كما هو بدون تخريب) ==================
-flyBtn.MouseButton1Click:Connect(function()
-    local carName = LocalPlayer.Name .. "'s Car"
-    local car = workspace:FindFirstChild("Cars") and workspace.Cars:FindFirstChild(carName)
-    if not car then return end
+       local success, err = pcall(function()
+           loadstring(game:HttpGet("https://raw.githubusercontent.com/SayedShagra/So-this-is-the-paid/refs/heads/main/Fly"))()
+       end)
 
-    for _, part in ipairs(car:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.Anchored = true
-            if not part.Name:lower():find("seat") then
-                part.Transparency = 1
-            end
-        end
-    end
+       if success then
+           Rayfield:Notify({Title = "Success", Content = "Fly Script Loaded!", Duration = 3})
+       else
+           Rayfield:Notify({Title = "Error", Content = "Check F9 Console", Duration = 5})
+           warn("Fly Error: " .. tostring(err))
+       end
+   end,
+})
 
-    local gui = Instance.new("ScreenGui", LocalPlayer.PlayerGui)
-    gui.Name = "CarFlightGui"
+-- =============================================
+-- Tab 3: Silent (Aim)
+-- =============================================
+local SilentTab = Window:CreateTab("Silent", 4483362458)
+local SilentSection = SilentTab:CreateSection("Combat")
 
-    local frame = Instance.new("Frame", gui)
-    frame.Size = UDim2.new(0, 250, 0, 70)
-    frame.Position = UDim2.new(0.7, 0, 0.75, 0)
-    frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
-    frame.Active = true
-    frame.Draggable = true
-    Instance.new("UICorner", frame)
+SilentTab:CreateButton({
+   Name = "Load Silent Aim",
+   Callback = function()
+       Rayfield:Notify({
+           Title = "Loading Script",
+           Content = "Loading Silent Aim...",
+           Duration = 3,
+           Image = 4483362458,
+       })
 
-    local buttons = {
-        {txt="⬆️", key="W"},
-        {txt="⬇️", key="S"},
-        {txt="⬅️", key="A"},
-        {txt="➡️", key="D"},
-    }
+       local success, err = pcall(function()
+           loadstring(game:HttpGet("https://raw.githubusercontent.com/SayedShagra/So-this-is-the-paid/refs/heads/main/Shotterrr"))()
+       end)
 
-    local active = {}
-    for i,v in ipairs(buttons) do
-        local b = Instance.new("TextButton", frame)
-        b.Size = UDim2.new(0,50,0,50)
-        b.Position = UDim2.new(0,10+(i-1)*60,0,10)
-        b.Text = v.txt
-        b.TextScaled = true
-        b.BackgroundColor3 = Color3.fromRGB(50,50,50)
-        b.TextColor3 = Color3.new(1,1,1)
+       if success then
+           Rayfield:Notify({Title = "Success", Content = "Silent Aim Loaded!", Duration = 3})
+       else
+           Rayfield:Notify({Title = "Error", Content = "Check F9 Console", Duration = 5})
+           warn("Silent Aim Error: " .. tostring(err))
+       end
+   end,
+})
 
-        b.MouseButton1Down:Connect(function() active[v.key] = true end)
-        b.MouseButton1Up:Connect(function() active[v.key] = false end)
-    end
-
-    local speed = 2
-    RunService.Heartbeat:Connect(function()
-        local dir = Vector3.zero
-        if active.W then dir += Camera.CFrame.LookVector end
-        if active.S then dir -= Camera.CFrame.LookVector end
-        if active.A then dir -= Camera.CFrame.RightVector end
-        if active.D then dir += Camera.CFrame.RightVector end
-
-        if dir.Magnitude > 0 then
-            for _, p in ipairs(car:GetDescendants()) do
-                if p:IsA("BasePart") then
-                    p.CFrame += dir.Unit * speed
-                end
-            end
-        end
-    end)
-end)
-
--- ================== Silent Aim (التعديل الوحيد) ==================
-aimBtn.MouseButton1Click:Connect(function()
-    loadstring(game:HttpGet(
-        "https://raw.githubusercontent.com/SayedShagra/So-this-is-the-paid/refs/heads/main/Shotterrr"
-    ))()
-end)
-
--- ================== Other ==================
-otherBtn.MouseButton1Click:Connect(function()
-    loadstring(game:HttpGet(
-        "https://raw.githubusercontent.com/SayedShagra/So-this-is-the-paid/refs/heads/main/Dheu"
-    ))()
-end)
+Rayfield:Load()
