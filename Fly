@@ -1,0 +1,88 @@
+-- الخدمات الأساسية
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- ================== وظيفة الطيران ==================
+local function EnableCarFly()
+    -- البحث عن السيارة
+    local carName = LocalPlayer.Name .. "'s Car"
+    local carFolder = workspace:FindFirstChild("Cars")
+    if not carFolder then return end
+
+    local car = carFolder:FindFirstChild(carName)
+    if not car then return end
+
+    -- تثبيت السيارة وإخفاء الأجزاء غير المقعد
+    for _, part in ipairs(car:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.Anchored = true
+            if not part.Name:lower():find("seat") then
+                part.Transparency = 1
+            end
+        end
+    end
+
+    -- ================== GUI الأسهم ==================
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "CarFlightGui"
+    gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 250, 0, 70)
+    frame.Position = UDim2.new(0.7, 0, 0.75, 0)
+    frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+    frame.Active = true
+    frame.Draggable = true
+    frame.BorderSizePixel = 0
+    frame.Parent = gui
+    Instance.new("UICorner", frame)
+
+    local buttons = {
+        {txt="⬆️", key="W"},
+        {txt="⬇️", key="S"},
+        {txt="⬅️", key="A"},
+        {txt="➡️", key="D"},
+    }
+
+    local active = {}
+
+    for i,v in ipairs(buttons) do
+        local b = Instance.new("TextButton", frame)
+        b.Size = UDim2.new(0,50,0,50)
+        b.Position = UDim2.new(0,10+(i-1)*60,0,10)
+        b.Text = v.txt
+        b.TextScaled = true
+        b.BackgroundColor3 = Color3.fromRGB(50,50,50)
+        b.TextColor3 = Color3.new(1,1,1)
+        b.BorderSizePixel = 0
+        Instance.new("UICorner", b)
+
+        b.MouseButton1Down:Connect(function() active[v.key] = true end)
+        b.MouseButton1Up:Connect(function() active[v.key] = false end)
+        b.MouseLeave:Connect(function() active[v.key] = false end)
+    end
+
+    -- ================== منطق الطيران ==================
+    local speed = 2
+
+    RunService.Heartbeat:Connect(function()
+        local dir = Vector3.zero
+        if active.W then dir += Camera.CFrame.LookVector end
+        if active.S then dir -= Camera.CFrame.LookVector end
+        if active.A then dir -= Camera.CFrame.RightVector end
+        if active.D then dir += Camera.CFrame.RightVector end
+
+        if dir.Magnitude > 0 then
+            for _, p in ipairs(car:GetDescendants()) do
+                if p:IsA("BasePart") then
+                    p.CFrame += dir.Unit * speed
+                end
+            end
+        end
+    end)
+end
+
+-- ================== تفعيل الطيران ==================
+EnableCarFly()
