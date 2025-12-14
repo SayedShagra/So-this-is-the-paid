@@ -1,0 +1,131 @@
+-- SERVICES
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+-- =========================
+-- ESP + ITEMS (AUTO ENABLE)
+-- =========================
+
+local ESPHighlights = {}
+local HealthLabels = {}
+local ItemLabels = {}
+
+-- تنظيف عند خروج لاعب
+local function cleanup(player)
+	if ESPHighlights[player] then ESPHighlights[player]:Destroy() end
+	if HealthLabels[player] then HealthLabels[player].Parent:Destroy() end
+	if ItemLabels[player] then ItemLabels[player].Parent:Destroy() end
+	ESPHighlights[player] = nil
+	HealthLabels[player] = nil
+	ItemLabels[player] = nil
+end
+
+-- إنشاء ESP + Health + Items
+local function setupPlayer(player)
+	if player == LocalPlayer then return end
+
+	local function onCharacter(char)
+		task.wait(0.5)
+		cleanup(player)
+
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		if not hum or not hrp then return end
+
+		-- ===== ESP Highlight =====
+		local highlight = Instance.new("Highlight")
+		highlight.FillColor = Color3.fromRGB(0,255,0)
+		highlight.OutlineColor = Color3.fromRGB(0,150,0)
+		highlight.FillTransparency = 0.5
+		highlight.OutlineTransparency = 0
+		highlight.Adornee = char
+		highlight.Parent = PlayerGui
+		ESPHighlights[player] = highlight
+
+		-- ===== Health Billboard =====
+		local healthBillboard = Instance.new("BillboardGui")
+		healthBillboard.Size = UDim2.new(0,100,0,25)
+		healthBillboard.StudsOffset = Vector3.new(0,-3,0)
+		healthBillboard.AlwaysOnTop = true
+		healthBillboard.Adornee = hrp
+		healthBillboard.Parent = PlayerGui
+
+		local healthText = Instance.new("TextLabel")
+		healthText.Size = UDim2.new(1,0,1,0)
+		healthText.BackgroundTransparency = 1
+		healthText.TextColor3 = Color3.fromRGB(0,255,0)
+		healthText.Font = Enum.Font.SourceSansBold
+		healthText.TextSize = 16
+		healthText.Parent = healthBillboard
+
+		HealthLabels[player] = healthText
+
+		-- تحديث الصحة
+		RunService.Heartbeat:Connect(function()
+			if hum.Parent then
+				healthText.Text = "HP: " .. math.floor(hum.Health)
+			end
+		end)
+
+		-- ===== ITEMS Billboard =====
+		local itemBillboard = Instance.new("BillboardGui")
+		itemBillboard.Size = UDim2.new(0,200,0,30)
+		itemBillboard.StudsOffset = Vector3.new(0,3,0)
+		itemBillboard.AlwaysOnTop = true
+		itemBillboard.Adornee = hrp
+		itemBillboard.Parent = PlayerGui
+
+		local itemText = Instance.new("TextLabel")
+		itemText.Size = UDim2.new(1,0,1,0)
+		itemText.BackgroundTransparency = 1
+		itemText.TextColor3 = Color3.fromRGB(255,255,255)
+		itemText.Font = Enum.Font.SourceSansBold
+		itemText.TextSize = 14
+		itemText.TextWrapped = true
+		itemText.Parent = itemBillboard
+
+		ItemLabels[player] = itemText
+
+		-- تحديث الأدوات
+		task.spawn(function()
+			while char.Parent do
+				local items = {}
+
+				if player:FindFirstChild("Backpack") then
+					for _, tool in ipairs(player.Backpack:GetChildren()) do
+						if tool:IsA("Tool") then
+							table.insert(items, tool.Name)
+						end
+					end
+				end
+
+				for _, tool in ipairs(char:GetChildren()) do
+					if tool:IsA("Tool") then
+						table.insert(items, tool.Name)
+					end
+				end
+
+				itemText.Text = table.concat(items, ", ")
+				task.wait(0.5)
+			end
+		end)
+	end
+
+	if player.Character then
+		onCharacter(player.Character)
+	end
+
+	player.CharacterAdded:Connect(onCharacter)
+end
+
+-- تشغيل على اللاعبين الحاليين
+for _, plr in ipairs(Players:GetPlayers()) do
+	setupPlayer(plr)
+end
+
+-- لاعبين جدد
+Players.PlayerAdded:Connect(setupPlayer)
+Players.PlayerRemoving:Connect(cleanup)
