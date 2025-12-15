@@ -1,0 +1,371 @@
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+
+-- إعدادات افتراضية
+local Settings = {
+    SpamCount = 1,
+    RainbowMode = false,
+    FrameColor = Color3.fromRGB(25, 25, 25),
+    TextColor = Color3.fromRGB(255, 255, 255)
+}
+
+-- مسارات الريموتات
+local killRemotePath = ReplicatedStorage:WaitForChild("Modules")
+    :WaitForChild("Packages")
+    :WaitForChild("_Index")
+    :WaitForChild("sleitnick_net@0.2.0")
+    :WaitForChild("net")
+    :WaitForChild("RE/ThrowEvent")
+
+local snowRemotePath = ReplicatedStorage:WaitForChild("Assets"):WaitForChild("SnowPileEvent")
+
+--------------------------------------------------------------------
+-- 1. دالة البحث عن أقرب لاعب
+--------------------------------------------------------------------
+local function GetClosestPlayer()
+    local closest = nil
+    local shortestDist = math.huge
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local root = player.Character:FindFirstChild("HumanoidRootPart")
+            local hum = player.Character:FindFirstChild("Humanoid")
+            
+            if root and hum and hum.Health > 0 then
+                local dist = (root.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
+                if dist < shortestDist then
+                    shortestDist = dist
+                    closest = player
+                end
+            end
+        end
+    end
+    return closest
+end
+
+--------------------------------------------------------------------
+-- 2. إنشاء الـ GUI
+--------------------------------------------------------------------
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "StingrayhubChristmasversion1_UI" -- الاسم الجديد
+if game:GetService("CoreGui"):FindFirstChild("StingrayhubChristmasversion1_UI") then
+    game:GetService("CoreGui"):FindFirstChild("StingrayhubChristmasversion1_UI"):Destroy()
+end
+ScreenGui.Parent = game:GetService("CoreGui")
+
+-- دالة السحب القوية (تعمل عبر الأزرار)
+local function EnableDragging(guiObject, parentFrame)
+    local dragging = false
+    local dragInput, dragStart, startPos
+
+    guiObject.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = parentFrame.Position
+            
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    guiObject.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            TweenService:Create(parentFrame, TweenInfo.new(0.05), {
+                Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            }):Play()
+        end
+    end)
+end
+
+-- === [ عنصر 1: إطار القتل ] ===
+local KillFrame = Instance.new("Frame")
+KillFrame.Name = "KillFrame"
+KillFrame.Parent = ScreenGui
+KillFrame.BackgroundColor3 = Settings.FrameColor
+KillFrame.Position = UDim2.new(0.85, 0, 0.5, 0)
+KillFrame.Size = UDim2.new(0, 85, 0, 85)
+KillFrame.Visible = false
+
+local KillCorner = Instance.new("UICorner")
+KillCorner.CornerRadius = UDim.new(0, 16)
+KillCorner.Parent = KillFrame
+
+local KillStroke = Instance.new("UIStroke")
+KillStroke.Parent = KillFrame
+KillStroke.Thickness = 2.5
+KillStroke.Color = Color3.fromRGB(50, 50, 50)
+
+local KillBtn = Instance.new("TextButton")
+KillBtn.Parent = KillFrame
+KillBtn.Size = UDim2.new(1, 0, 1, 0)
+KillBtn.BackgroundTransparency = 1
+KillBtn.Text = "KILL"
+KillBtn.TextColor3 = Color3.fromRGB(255, 60, 60)
+KillBtn.TextSize = 22
+KillBtn.Font = Enum.Font.GothamBlack
+KillBtn.AutoButtonColor = false
+
+EnableDragging(KillBtn, KillFrame)
+
+-- === [ عنصر 2: لوحة المعلومات ] ===
+local InfoFrame = Instance.new("Frame")
+InfoFrame.Name = "InfoFrame"
+InfoFrame.Parent = ScreenGui
+InfoFrame.BackgroundColor3 = Settings.FrameColor
+InfoFrame.Position = UDim2.new(0.85, 0, 0.35, 0)
+InfoFrame.Size = UDim2.new(0, 140, 0, 70)
+InfoFrame.Visible = false
+
+local InfoCorner = Instance.new("UICorner")
+InfoCorner.CornerRadius = UDim.new(0, 12)
+InfoCorner.Parent = InfoFrame
+
+local InfoStroke = Instance.new("UIStroke")
+InfoStroke.Parent = InfoFrame
+InfoStroke.Thickness = 2.5
+InfoStroke.Color = Color3.fromRGB(50, 50, 50)
+
+local InfoDragBtn = Instance.new("TextButton")
+InfoDragBtn.Parent = InfoFrame
+InfoDragBtn.Size = UDim2.new(1, 0, 1, 0)
+InfoDragBtn.BackgroundTransparency = 1
+InfoDragBtn.Text = ""
+InfoDragBtn.ZIndex = 5
+
+local NameLabel = Instance.new("TextLabel")
+NameLabel.Parent = InfoFrame
+NameLabel.BackgroundTransparency = 1
+NameLabel.Position = UDim2.new(0, 10, 0, 5)
+NameLabel.Size = UDim2.new(1, -20, 0, 30)
+NameLabel.Text = "Target: None"
+NameLabel.TextColor3 = Settings.TextColor
+NameLabel.TextXAlignment = Enum.TextXAlignment.Left
+NameLabel.Font = Enum.Font.GothamBold
+NameLabel.TextSize = 13
+
+local HealthLabel = Instance.new("TextLabel")
+HealthLabel.Parent = InfoFrame
+HealthLabel.BackgroundTransparency = 1
+HealthLabel.Position = UDim2.new(0, 10, 0, 35)
+HealthLabel.Size = UDim2.new(1, -20, 0, 30)
+HealthLabel.Text = "HP: 0%"
+HealthLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+HealthLabel.TextXAlignment = Enum.TextXAlignment.Left
+HealthLabel.Font = Enum.Font.Gotham
+HealthLabel.TextSize = 13
+
+EnableDragging(InfoDragBtn, InfoFrame)
+
+-- === [ عنصر 3: زر الثلج ] ===
+local SnowFrame = Instance.new("Frame")
+SnowFrame.Name = "SnowFrame"
+SnowFrame.Parent = ScreenGui
+SnowFrame.BackgroundColor3 = Settings.FrameColor
+SnowFrame.Position = UDim2.new(0.75, 0, 0.5, 0)
+SnowFrame.Size = UDim2.new(0, 85, 0, 85)
+SnowFrame.Visible = false
+
+local SnowCorner = Instance.new("UICorner")
+SnowCorner.CornerRadius = UDim.new(0, 16)
+SnowCorner.Parent = SnowFrame
+
+local SnowStroke = Instance.new("UIStroke")
+SnowStroke.Parent = SnowFrame
+SnowStroke.Thickness = 2.5
+SnowStroke.Color = Color3.fromRGB(50, 50, 50)
+
+local SnowBtn = Instance.new("TextButton")
+SnowBtn.Parent = SnowFrame
+SnowBtn.Size = UDim2.new(1, 0, 1, 0)
+SnowBtn.BackgroundTransparency = 1
+SnowBtn.Text = "GET\nSNOW"
+SnowBtn.TextColor3 = Color3.fromRGB(100, 230, 255)
+SnowBtn.TextSize = 18
+SnowBtn.Font = Enum.Font.GothamBlack
+SnowBtn.AutoButtonColor = false
+
+EnableDragging(SnowBtn, SnowFrame)
+
+--------------------------------------------------------------------
+-- 3. منطق الألوان المتحركة (Rainbow & RGB)
+--------------------------------------------------------------------
+task.spawn(function()
+    while true do
+        if Settings.RainbowMode then
+            local hue = tick() % 3 / 3 
+            local color = Color3.fromHSV(hue, 1, 1) 
+            
+            local tweenInfo = TweenInfo.new(0.1)
+            TweenService:Create(KillStroke, tweenInfo, {Color = color}):Play()
+            TweenService:Create(SnowStroke, tweenInfo, {Color = color}):Play()
+            TweenService:Create(InfoStroke, tweenInfo, {Color = color}):Play()
+            
+            TweenService:Create(KillBtn, tweenInfo, {TextColor3 = color}):Play()
+            TweenService:Create(SnowBtn, tweenInfo, {TextColor3 = color}):Play()
+        else
+            KillStroke.Color = Color3.fromRGB(50, 50, 50)
+            SnowStroke.Color = Color3.fromRGB(50, 50, 50)
+            InfoStroke.Color = Color3.fromRGB(50, 50, 50)
+            
+            KillBtn.TextColor3 = Color3.fromRGB(255, 60, 60)
+            SnowBtn.TextColor3 = Color3.fromRGB(100, 230, 255)
+        end
+        task.wait(0.1)
+    end
+end)
+
+--------------------------------------------------------------------
+-- 4. منطق الأزرار والـ Info
+--------------------------------------------------------------------
+
+RunService.RenderStepped:Connect(function()
+    if InfoFrame.Visible then
+        local target = GetClosestPlayer()
+        if target then
+            NameLabel.Text = "Target: " .. target.Name
+            if target.Character and target.Character:FindFirstChild("Humanoid") then
+                local hp = math.floor(target.Character.Humanoid.Health)
+                HealthLabel.Text = "HP: " .. hp
+                if hp > 70 then HealthLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+                elseif hp > 30 then HealthLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
+                else HealthLabel.TextColor3 = Color3.fromRGB(255, 50, 50) end
+            end
+        else
+            NameLabel.Text = "Target: None"
+            HealthLabel.Text = "HP: --"
+            HealthLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+        end
+    end
+end)
+
+KillBtn.MouseButton1Click:Connect(function()
+    local target = GetClosestPlayer()
+    if target and target.Character then
+        local root = target.Character:FindFirstChild("HumanoidRootPart")
+        local hum = target.Character:FindFirstChild("Humanoid")
+        
+        if root and hum then
+            local oldText = KillBtn.Text
+            KillBtn.Text = "HIT x" .. Settings.SpamCount
+            
+            task.spawn(function()
+                for i = 1, Settings.SpamCount do
+                    pcall(function()
+                        killRemotePath:FireServer("HitSFX", root.Position)
+                        killRemotePath:FireServer("Landed", root.Position)
+                        killRemotePath:FireServer("Hit", hum)
+                    end)
+                    task.wait() 
+                end
+                task.wait(0.2)
+                if not Settings.RainbowMode then KillBtn.Text = "KILL" end
+            end)
+        end
+    else
+        KillBtn.Text = "NO TARGET"
+        task.delay(0.5, function() if not Settings.RainbowMode then KillBtn.Text = "KILL" end end)
+    end
+end)
+
+SnowBtn.MouseButton1Click:Connect(function()
+    local success, err = pcall(function()
+        local snowPile = workspace:FindFirstChild("XMAS") 
+            and workspace.XMAS:FindFirstChild("SnowPiles") 
+            and workspace.XMAS.SnowPiles:FindFirstChild("SnowPile")
+        
+        if snowPile then
+            snowRemotePath:FireServer(snowPile)
+            local old = SnowBtn.Text
+            SnowBtn.Text = "DONE"
+            task.delay(0.5, function() if not Settings.RainbowMode then SnowBtn.Text = "GET\nSNOW" end end)
+        else
+            SnowBtn.Text = "NO PILE"
+            task.delay(0.5, function() if not Settings.RainbowMode then SnowBtn.Text = "GET\nSNOW" end end)
+        end
+    end)
+end)
+
+--------------------------------------------------------------------
+-- 6. قائمة Rayfield
+--------------------------------------------------------------------
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "Stingray hub Christmas version 1", -- الاسم الجديد
+    LoadingTitle = "Stingray hub Loading...", -- الاسم الجديد
+    LoadingSubtitle = "Christmas version 1", -- الاسم الجديد
+    ConfigurationSaving = { Enabled = false },
+    KeySystem = false,
+})
+
+local MainTab = Window:CreateTab("Controls", 4483362458)
+
+MainTab:CreateSection("Appearance")
+
+MainTab:CreateToggle({
+    Name = "Rainbow Mode (Moving Colors)",
+    CurrentValue = false,
+    Callback = function(Value)
+        Settings.RainbowMode = Value
+    end,
+})
+
+MainTab:CreateColorPicker({
+    Name = "Background Color",
+    Color = Color3.fromRGB(25, 25, 25),
+    Callback = function(Value)
+        Settings.FrameColor = Value
+        KillFrame.BackgroundColor3 = Value
+        SnowFrame.BackgroundColor3 = Value
+        InfoFrame.BackgroundColor3 = Value
+    end
+})
+
+MainTab:CreateSection("GUI Toggles")
+
+MainTab:CreateToggle({
+    Name = "Show Kill Button",
+    CurrentValue = false,
+    Callback = function(Value) KillFrame.Visible = Value end,
+})
+
+MainTab:CreateToggle({
+    Name = "Show Target Info",
+    CurrentValue = false,
+    Callback = function(Value) InfoFrame.Visible = Value end,
+})
+
+MainTab:CreateToggle({
+    Name = "Show Snowball Button",
+    CurrentValue = false,
+    Callback = function(Value) SnowFrame.Visible = Value end,
+})
+
+MainTab:CreateSection("Combat")
+
+MainTab:CreateSlider({
+    Name = "Attack Spam Count",
+    Range = {1, 20},
+    Increment = 1,
+    CurrentValue = 1,
+    Callback = function(Value)
+        Settings.SpamCount = Value
+    end,
+})
+
+Rayfield:Notify({Title = "Stingray Hub", Content = "Christmas version 1 Loaded!", Duration = 5})
